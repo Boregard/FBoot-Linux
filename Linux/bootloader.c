@@ -13,6 +13,7 @@
 #include <time.h>
 #include <errno.h>
 #include <sys/times.h>
+#include <sys/ioctl.h>
 
 #include "com.h"
 #include "protocol.h"
@@ -29,7 +30,7 @@ typedef struct bootInfo
 
 /// Definitions
 #define TIMEOUT   3  // 0.3s
-#define TIMEOUTP  30 // 3s
+#define TIMEOUTP  40 // 4s
 
 
 /**
@@ -291,6 +292,42 @@ long readval()
     }
 }
 
+/**
+ * Print percentage line
+ */
+void printPercentage (char          *text,
+                      unsigned long full_val,
+                      unsigned long cur_val)
+{
+    static char percline[1024];
+    int         cur_perc;
+    int         cur100p;
+    int         txtLen = 10;    // length of the add. text 2 * " | " "100%"
+    unsigned short columns = 80;
+    struct winsize tWinsize;
+
+    if (text)
+        txtLen += strlen (text);
+
+    if (ioctl (STDIN_FILENO, TIOCGWINSZ, &tWinsize) >= 0)
+    {
+        // number of columns in terminal
+        columns = tWinsize.ws_col;
+    }
+    cur100p  = columns - txtLen;
+    cur_perc = (cur_val * cur100p) / full_val;
+    memset (percline, ' ', cur100p);
+    memset (percline, '#', cur_perc);
+    percline[cur100p] = '\0';
+
+    printf ("%s | %s | %3d%%\r",
+            text ? text : "",
+            percline,
+            (int)((cur_val * 100) / full_val));
+
+    fflush(stdout);
+}
+
 
 /**
  * Flashes or verify the controller
@@ -317,7 +354,7 @@ int flash (char         verify,
     if(verify == 0)
     {
         printf("Writing program memory...\n");
-        printf("Programming \"%s\": 00000 - 00000", filename);
+        printf("Programming \"%s\": 00000 - %05lX\n", filename, lastaddr);
         sendcommand(PROGRAM);
     }
     else
@@ -325,7 +362,8 @@ int flash (char         verify,
         int foo;
 
         sendcommand(VERIFY);
-        printf("Verifying program memory...\n");
+        printf("Verifying program memory...\r");
+        fflush(stdout);
 
         foo = com_getc(TIMEOUT);
         if(foo == BADCOMMAND)
@@ -333,7 +371,7 @@ int flash (char         verify,
             printf("Verify not available\n");
             return 0;
         }
-        printf( "Verify %s: 00000 - 00000", filename);
+        printf( "Verify %s: 00000 - %05lX\n", filename, lastaddr);
     }
 
     // Sending data to MC
@@ -352,12 +390,14 @@ int flash (char         verify,
 
         if(--i == 0)
         {
-            printf( "\b\b\b\b\b%05lX", addr + 1);
-            fflush(stdout);
+            if (verify)
+                printPercentage ("Verifying", lastaddr, addr);
+            else
+                printPercentage ("Writing", lastaddr, addr);
 
             if(!verify && com_getc(TIMEOUTP) != CONTINUE)
             {
-                printf(" failed!\n");
+                printf("\n Failed!\n");
                 free(data);
                 return 0;
             }
@@ -369,17 +409,18 @@ int flash (char         verify,
             com_putc(ESCAPE);
             com_putc(ESC_SHIFT); // A5,80 = End
 
-            printf("\b\b\b\b\b%05lX", addr);
+            if (verify)
+                printPercentage ("Verifying", lastaddr, addr);
+            else
+                printPercentage ("Writing", lastaddr, addr);
 
             if(com_getc(TIMEOUTP) == SUCCESS)
             {
-                printf(" successful!");
+                printf("\n Success!");
             }
             else
             {
-                printf(" failed!\n");
-                free(data);
-                return 0;
+                printf("\n Failed!");
             }
             break;
         }
@@ -427,8 +468,8 @@ void connect_device()
         fflush(stdout);
 
         com_puts(PASSWORD);
-        usleep(10000);//wait 10ms
-        in = com_getc(0);
+//        usleep(10000);//wait 10ms
+        in = com_getc(1);
 
         if(in == CONNECT)
         {
