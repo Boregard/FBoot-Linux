@@ -28,14 +28,8 @@ typedef struct bootInfo
 
 
 /// Definitions
-#define TIMEOUT   5  // 0.3s
-#define TIMEOUTP  72 // 4s
-
-
-///show elapsed time @ ms / s
-///only ONE definition!
-//#define SHOW_TIME_MS
-#define SHOW_TIME_S
+#define TIMEOUT   3  // 0.3s
+#define TIMEOUTP  30 // 3s
 
 
 /**
