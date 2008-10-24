@@ -6,9 +6,6 @@
 ;-------------------------------------------------------------------------
 .equ	VERSION		= 0x0201
 
-.equ	XTAL		= 1000000	; 8MHz, not critical 
-.equ	BootDelay	= XTAL / 3	; 0.33s
-
 ;------------------------------	select UART mode -------------------------
 .if SRX == STX && SRX_PORT == STX_PORT
   .equ	ONEWIRE		= 3
@@ -59,9 +56,9 @@
 ;------------------------------	Bootloader fuse setting ------------------
 .ifdef	FirstBootStart
   .if	(FlashEnd - FirstBootStart) >= 255	; 256 Words needed
-    .equ	BootStart	= FirstBootStart
+    .set	BootStart	= FirstBootStart
   .else
-    .equ	BootStart	= SecondBootStart
+    .set	BootStart	= SecondBootStart
   .endif
   ;----------------------------	max possible buffer size -----------------
   .set	BufferSize	= SRAM_SIZE / 2 - PAGESIZE
@@ -79,7 +76,7 @@
   .equ	UserFlash	= (2*BootStart)
   .equ	Application	= 0
 .else
-  .equ	BootStart	= ((FlashEnd - BootSize) / PageSize * PageSize)
+  .set	BootStart	= ((FlashEnd - BootSize) / PageSize * PageSize)
   .equ	BufferSize	= PageSize
   .equ	UserFlash	= (2*BootStart - 2)
   .equ	Application	= BootStart - 1

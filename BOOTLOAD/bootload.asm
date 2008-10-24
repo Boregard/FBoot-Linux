@@ -20,10 +20,10 @@
 ;.include "tn861def.inc"
 
 ;			set the SecondBootStart fuse on these AVRs:
-.include "m8def.inc"
+;.include "m8def.inc"
 ;.include "m8515def.inc"
 ;.include "m8535def.inc"
-;.include "m88def.inc"
+.include "m88def.inc"
 ;.include "m16def.inc"
 ;.include "m162def.inc"
 ;.include "m168def.inc"
@@ -60,6 +60,10 @@
 
 .equ    SRX_PORT        = PORTD
 .equ    SRX             = PD0
+
+.equ	XTAL		= 1000000	; 8MHz, not critical 
+.equ	BootDelay	= XTAL / 3	; 0.33s
+
 ;-------------------------------------------------------------------------
 .include "fastload.inc"
 ;-------------------------------------------------------------------------
