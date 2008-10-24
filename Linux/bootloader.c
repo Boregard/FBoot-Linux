@@ -338,6 +338,7 @@ int flash (char         verify,
 {
     char * data = NULL;
     int    i;
+    unsigned char response;
     unsigned char d1;
     unsigned long addr;
     unsigned long lastaddr = 0;
@@ -359,14 +360,12 @@ int flash (char         verify,
     }
     else
     {
-        int foo;
-
         sendcommand(VERIFY);
         printf("Verifying program memory...\r");
         fflush(stdout);
 
-        foo = com_getc(TIMEOUT);
-        if(foo == BADCOMMAND)
+        response = com_getc(TIMEOUT);
+        if(response == BADCOMMAND)
         {
             printf("Verify not available\n");
             return 0;
@@ -375,57 +374,66 @@ int flash (char         verify,
     }
 
     // Sending data to MC
-    for(i = bInfo->buffsize, addr = 0;; addr++)
+    addr = 0;
+    i = lastaddr - addr;
+    if (i > bInfo->buffsize)
+        i = bInfo->buffsize;
+
+    while (i > 0)
     {
-        switch(d1 = data[addr])
+        if (verify)
+            printPercentage ("Verifying", lastaddr, addr);
+        else
+            printPercentage ("Writing", lastaddr, addr);
+
+        // first write one buffer
+        while (i > 0)
         {
-            case ESCAPE:
-            case 0x13:
-                com_putc(ESCAPE);
-                d1 += ESC_SHIFT;
-            default:
-                com_putc(d1);
+            switch(d1 = data[addr])
+            {
+                case ESCAPE:
+                case 0x13:
+                    com_putc(ESCAPE);
+                    d1 += ESC_SHIFT;
+                default:
+                    if (i % 4)
+                        com_putc_fast (d1);
+                    else
+                        com_putc (d1);
+            }
+            i--;
+            addr++;
         }
 
+        // set nr of bytes with next block
+        i = lastaddr - addr;
+        if (i > bInfo->buffsize)
+            i = bInfo->buffsize;
 
-        if(--i == 0)
+        if (i > 0)
         {
-            if (verify)
-                printPercentage ("Verifying", lastaddr, addr);
-            else
-                printPercentage ("Writing", lastaddr, addr);
-
-            if(!verify && com_getc(TIMEOUTP) != CONTINUE)
+            // now check if it is correctly burned
+            if (!verify && (com_getc (TIMEOUTP) != CONTINUE))
             {
                 printf("\n Failed!\n");
                 free(data);
                 return 0;
             }
-            i = bInfo->buffsize;
-        }
-
-        if(addr == lastaddr)
-        {
-            com_putc(ESCAPE);
-            com_putc(ESC_SHIFT); // A5,80 = End
-
-            if (verify)
-                printPercentage ("Verifying", lastaddr, addr);
-            else
-                printPercentage ("Writing", lastaddr, addr);
-
-            if(com_getc(TIMEOUTP) == SUCCESS)
-            {
-                printf("\n Success!");
-            }
-            else
-            {
-                printf("\n Failed!");
-            }
-            break;
         }
     }
-    printf("\n");
+
+    if (verify)
+        printPercentage ("Verifying", 100, 100);
+    else
+        printPercentage ("Writing",   100, 100);
+
+    com_putc(ESCAPE);
+    com_putc(ESC_SHIFT); // A5,80 = End
+
+    if (com_getc(TIMEOUTP) == SUCCESS)
+        printf("\n Success!\n");
+    else
+        printf("\n Failed!\n");
 
     free(data);
 

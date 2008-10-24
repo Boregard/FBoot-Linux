@@ -38,6 +38,7 @@ void com_close();
 /**
  * Sends one char
  */
+void com_putc_fast(unsigned char c);
 void com_putc(unsigned char c);
 
 /**

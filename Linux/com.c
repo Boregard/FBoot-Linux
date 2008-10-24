@@ -98,12 +98,19 @@ void com_close()
 /**
  * Sends one char
  */
+void com_putc_fast(unsigned char c)
+{
+    write(fd, &c, 1);
+    calc_crc( c ); // calculate transmit CRC
+}
+
 void com_putc(unsigned char c) 
 {
     tcdrain(fd);
     write(fd, &c, 1);
     calc_crc( c ); // calculate transmit CRC
 }
+
 
 /**
  * Recives one char or -1 if timeout
