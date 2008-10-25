@@ -279,7 +279,6 @@ long readval()
                 if(i == FAIL) {
                     return -2;
                 }
-
                 else if(i == ANSWER) {
                     j = 256;
                 }
@@ -329,6 +328,17 @@ void printPercentage (char          *text,
 }
 
 
+void printActivity (char          verify,
+                    unsigned long full_val,
+                    unsigned long cur_val)
+{
+    if (verify)
+        printPercentage ("Verifying", full_val, cur_val);
+    else
+        printPercentage ("Writing", full_val, cur_val);
+}
+
+
 /**
  * Flashes or verify the controller
  */
@@ -336,6 +346,11 @@ int flash (char         verify,
            const char * filename,
            bootInfo_t * bInfo)
 {
+    struct tms  theTimes;
+    clock_t start_time;       //time
+    clock_t end_time;         //time
+    float   seconds;
+
     char * data = NULL;
     int    i;
     unsigned char response;
@@ -351,17 +366,19 @@ int flash (char         verify,
       return 0;
       }*/
 
+    start_time = times (&theTimes);
+
     // Sending commands to MC
     if(verify == 0)
     {
         printf("Writing program memory...\n");
-        printf("Programming \"%s\": 00000 - %05lX\n", filename, lastaddr);
+        printf("Programming: 00000 - %05lX\n", lastaddr);
         sendcommand(PROGRAM);
     }
     else
     {
         sendcommand(VERIFY);
-        printf("Verifying program memory...\r");
+        printf("Verifying program memory...\n");
         fflush(stdout);
 
         response = com_getc(TIMEOUT);
@@ -370,7 +387,7 @@ int flash (char         verify,
             printf("Verify not available\n");
             return 0;
         }
-        printf( "Verify %s: 00000 - %05lX\n", filename, lastaddr);
+        printf( "Verify: 00000 - %05lX\n", lastaddr);
     }
 
     // Sending data to MC
@@ -381,10 +398,7 @@ int flash (char         verify,
 
     while (i > 0)
     {
-        if (verify)
-            printPercentage ("Verifying", lastaddr, addr);
-        else
-            printPercentage ("Writing", lastaddr, addr);
+        printActivity (verify, lastaddr, addr);
 
         // first write one buffer
         while (i > 0)
@@ -397,10 +411,14 @@ int flash (char         verify,
                 d1 += ESC_SHIFT;
             }
             if (i % 8)
+            {
                 com_putc_fast (d1);
+            }
             else
+            {
+                printActivity (verify, lastaddr, addr);
                 com_putc (d1);
-
+            }
             i--;
             addr++;
         }
@@ -415,25 +433,29 @@ int flash (char         verify,
             // now check if it is correctly burned
             if (!verify && (com_getc (TIMEOUTP) != CONTINUE))
             {
-                printf("\n Failed!\n");
+                printf("\n ---------- Failed! ----------\n");
                 free(data);
                 return 0;
             }
         }
     }
 
-    if (verify)
-        printPercentage ("Verifying", 100, 100);
-    else
-        printPercentage ("Writing",   100, 100);
+    printActivity (verify, 100, 100);
+
+    end_time = times (&theTimes);
+    seconds  = (float)(end_time-start_time)/sysconf(_SC_CLK_TCK);
+
+    printf("\nElapsed time: %3.2f seconds, %.0f Bytes/sec.\n",
+           seconds,
+           (float)lastaddr / seconds);
 
     com_putc(ESCAPE);
     com_putc(ESC_SHIFT); // A5,80 = End
 
     if (com_getc(TIMEOUTP) == SUCCESS)
-        printf("\n Success!\n");
+        printf("\n ++++++++++ Success! ++++++++++\n\n");
     else
-        printf("\n Failed!\n");
+        printf("\n ---------- Failed! ----------\n\n");
 
     free(data);
 
@@ -631,10 +653,6 @@ int read_info (bootInfo_t *bInfo)
  */
 int main(int argc, char *argv[])
 {
-    struct tms  theTimes;
-    clock_t start_time;       //time
-    clock_t end_time;         //time
-
     // info buffer
     bootInfo_t bootInfo;
 
@@ -770,14 +788,7 @@ int main(int argc, char *argv[])
         printf("No CRC support.\n");
     }
 
-    start_time = times (&theTimes);
-
     flash(verify==1, hexfile, &bootInfo);
-
-    end_time = times (&theTimes);
-
-    printf("Elapsed time: %3.3f seconds\n",
-           (float)((float)(end_time-start_time)/sysconf(_SC_CLK_TCK)));
 
     printf("...starting application\n\n");
     sendcommand(START);         //start application
