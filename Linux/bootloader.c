@@ -452,14 +452,12 @@ int flash (char         verify,
     com_putc(ESCAPE);
     com_putc(ESC_SHIFT); // A5,80 = End
 
-    if (com_getc(TIMEOUTP) == SUCCESS)
-        printf("\n ++++++++++ Success! ++++++++++\n\n");
-    else
-        printf("\n ---------- Failed! ----------\n\n");
-
     free(data);
 
-    return 1;
+    if (com_getc(TIMEOUTP) == SUCCESS)
+        return 1;
+
+    return 0;
 }//int flash(char verify, const char * filename)
 
 
@@ -788,7 +786,15 @@ int main(int argc, char *argv[])
         printf("No CRC support.\n");
     }
 
-    flash(verify==1, hexfile, &bootInfo);
+    if (flash(verify==1, hexfile, &bootInfo))
+    {
+        if ((crc_on != 2) && (check_crc() != 0))
+            printf("\n ---------- Failed (CRC)! ----------\n\n");
+        else
+            printf("\n ++++++++++ Success! ++++++++++\n\n");
+    }
+    else
+        printf("\n ---------- Failed! ----------\n\n");
 
     printf("...starting application\n\n");
     sendcommand(START);         //start application
