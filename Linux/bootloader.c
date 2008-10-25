@@ -389,18 +389,18 @@ int flash (char         verify,
         // first write one buffer
         while (i > 0)
         {
-            switch(d1 = data[addr])
+            d1 = data[addr];
+
+            if ((d1 == ESCAPE) || (d1 == 0x13))
             {
-                case ESCAPE:
-                case 0x13:
-                    com_putc(ESCAPE);
-                    d1 += ESC_SHIFT;
-                default:
-                    if (i % 4)
-                        com_putc_fast (d1);
-                    else
-                        com_putc (d1);
+                com_putc(ESCAPE);
+                d1 += ESC_SHIFT;
             }
+            if (i % 8)
+                com_putc_fast (d1);
+            else
+                com_putc (d1);
+
             i--;
             addr++;
         }
@@ -546,7 +546,6 @@ int read_info (bootInfo_t *bInfo)
     char s[256];
     FILE *fp;
 
-///get bootloader REVISON
     sendcommand(REVISION);
 
     i = readval();
@@ -561,7 +560,6 @@ int read_info (bootInfo_t *bInfo)
         bInfo->revision = i;
     }
 
-///get SIGNATURE
     sendcommand(SIGNATURE);
 
     i = readval();
@@ -594,7 +592,6 @@ int read_info (bootInfo_t *bInfo)
     }
     printf("Target        : %06lX %s\n", i, s);
 
-///get BUFFSIZE
     sendcommand(BUFFSIZE);
 
     i = readval();
@@ -607,7 +604,6 @@ int read_info (bootInfo_t *bInfo)
 
     printf("Buffer        : %ld Byte\n", i );
 
-///get USERFLASH
     sendcommand(USERFLASH);
 
     i = readval();
@@ -638,8 +634,6 @@ int main(int argc, char *argv[])
     struct tms  theTimes;
     clock_t start_time;       //time
     clock_t end_time;         //time
-    float mytime = 0;//time @ ms
-
 
     // info buffer
     bootInfo_t bootInfo;
@@ -737,7 +731,8 @@ int main(int argc, char *argv[])
 
     if(!com_open(device, baud_const[baudid]))
     {
-        printf("Open com port failed!\n");
+        printf("Opening com port \"%s\" failed (%s)!\n", 
+               device, strerror (errno));
         exit(2);
     }
 
@@ -781,15 +776,14 @@ int main(int argc, char *argv[])
 
     end_time = times (&theTimes);
 
-    //time @ x.xxx sec
-    mytime = (float)((float)(end_time-start_time)/sysconf(_SC_CLK_TCK));
-    printf("Elapsed time: %3.3f seconds\n", mytime);//time @ x.xxx sec
+    printf("Elapsed time: %3.3f seconds\n",
+           (float)((float)(end_time-start_time)/sysconf(_SC_CLK_TCK)));
 
     printf("...starting application\n\n");
-    sendcommand(START);//start application
+    sendcommand(START);         //start application
     sendcommand(START);
 
-    com_close();//close opened com port
+    com_close();                //close open com port
     return 0;
 }
 
