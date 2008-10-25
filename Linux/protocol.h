@@ -1,39 +1,39 @@
 //*************************************************************************
-//				protocol definitions
+//          protocol definitions
 //-------------------------------------------------------------------------
-#define	COMMAND		0xA5			// Command sequence start
-#define	ESCAPE		COMMAND
+#define  COMMAND     0xA5        // Command sequence start
+#define  ESCAPE      COMMAND
 
-#define	CONNECT		0xA6			// connection established
-#define	BADCOMMAND	0xA7			// command not supported
-#define	ANSWER		0xA8			// followed by length byte
-#define	CONTINUE		0xA9
-#define	SUCCESS		0xAA
-#define	FAIL			0xAB
+#define  CONNECT     0xA6        // connection established
+#define  BADCOMMAND  0xA7        // command not supported
+#define  ANSWER      0xA8        // followed by length byte
+#define  CONTINUE    0xA9
+#define  SUCCESS     0xAA
+#define  FAIL        0xAB
 
-#define	ESC_SHIFT	0x80			// offset escape char
+#define  ESC_SHIFT   0x80        // offset escape char
 
-#define	PROGEND		0xFF			// A5, FF
-#define	REVISION		0				// get bootloader revision
-#define	BUFFSIZE		1				// get buffer size
-#define	SIGNATURE	2				// get target signature
-#define 	USERFLASH	3				// get user flash size
-#define	PROGRAM		4				// program flash
-#define	START			5				// start application
-#define	CHECK_CRC	6				// CRC o.k.
-#define	VERIFY		7				// Verify
+#define  PROGEND     0xFF        // A5, FF
+#define  REVISION    0           // get bootloader revision
+#define  BUFFSIZE    1           // get buffer size
+#define  SIGNATURE   2           // get target signature
+#define  USERFLASH   3           // get user flash size
+#define  PROGRAM     4           // program flash
+#define  START       5           // start application
+#define  CHECK_CRC   6           // CRC o.k.
+#define  VERIFY      7           // Verify
 
-#define	MAXFLASH	0x40000UL		// max flash size (256kB)
+#define  MAXFLASH 0x40000UL      // max flash size (256kB)
 
 //-------------------------------------------------------------------------
-//				APICALL definitions
+//          APICALL definitions
 //-------------------------------------------------------------------------
-#define	API_PROG_PAGE	0x81		// copy one Page from SRAM to Flash
+#define  API_PROG_PAGE  0x81     // copy one Page from SRAM to Flash
 
-#define	API_SUCCESS		0x80		// success
-#define	API_ERR_FUNC	0xF0		// function not supported
-#define	API_ERR_RANGE	0xF1		// address inside bootloader
-#define	API_ERR_PAGE	0xF2		// address not page aligned
+#define  API_SUCCESS    0x80     // success
+#define  API_ERR_FUNC   0xF0     // function not supported
+#define  API_ERR_RANGE  0xF1     // address inside bootloader
+#define  API_ERR_PAGE   0xF2     // address not page aligned
 //-------------------------------------------------------------------------
 
 
