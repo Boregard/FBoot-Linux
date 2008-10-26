@@ -340,55 +340,101 @@ void printActivity (char          verify,
 
 
 /**
- * Flashes or verify the controller
+ * Verify the controller
  */
-int flash (char         verify,
-           const char * filename,
-           bootInfo_t * bInfo)
+int verifyFlash (char        * data,
+                 unsigned long lastaddr,
+                 bootInfo_t  * bInfo)
 {
     struct tms  theTimes;
     clock_t start_time;       //time
     clock_t end_time;         //time
     float   seconds;
 
-    char * data = NULL;
     int    i;
-    unsigned char response;
     unsigned char d1;
     unsigned long addr;
-    unsigned long lastaddr = 0;
-
-    //read data from hex-file
-    data = readHexfile(filename, bInfo->flashsize, &lastaddr);
-
-    /*if(data == NULL) {
-      printf("Reading file failed.\n");
-      return 0;
-      }*/
 
     start_time = times (&theTimes);
 
     // Sending commands to MC
-    if(verify == 0)
-    {
-        printf("Writing program memory...\n");
-        printf("Programming: 00000 - %05lX\n", lastaddr);
-        sendcommand(PROGRAM);
-    }
-    else
-    {
-        sendcommand(VERIFY);
-        printf("Verifying program memory...\n");
-        fflush(stdout);
+    sendcommand(VERIFY);
+    printf("Verifying program memory...\n");
 
-        response = com_getc(TIMEOUT);
-        if(response == BADCOMMAND)
-        {
-            printf("Verify not available\n");
-            return 0;
-        }
-        printf( "Verify: 00000 - %05lX\n", lastaddr);
+    if(com_getc(TIMEOUT) == BADCOMMAND)
+    {
+        printf("Verify not available\n");
+        return 0;
     }
+    printf( "Verify: 00000 - %05lX\n", lastaddr);
+
+    // Sending data to MC
+    addr = 0;
+    i = lastaddr - addr;
+
+    while (i > 0)
+    {
+        d1 = data[addr];
+
+        if ((d1 == ESCAPE) || (d1 == 0x13))
+        {
+            com_putc(ESCAPE);
+            d1 += ESC_SHIFT;
+        }
+        if (i % 12)
+        {
+            com_putc_fast (d1);
+        }
+        else
+        {
+            printPercentage ("Verifying", lastaddr, addr);
+            com_putc (d1);
+        }
+        i--;
+        addr++;
+    }
+
+    printPercentage ("Verifying", 100, 100);
+
+    end_time = times (&theTimes);
+    seconds  = (float)(end_time-start_time)/sysconf(_SC_CLK_TCK);
+
+    printf("\nElapsed time: %3.2f seconds, %.0f Bytes/sec.\n",
+           seconds,
+           (float)lastaddr / seconds);
+
+    com_putc(ESCAPE);
+    com_putc(ESC_SHIFT); // A5,80 = End
+
+    if (com_getc(TIMEOUTP) == SUCCESS)
+        return 1;
+
+    return 0;
+}
+
+
+/**
+ * Flashes the controller
+ */
+int programFlash (char        * data,
+                  unsigned long lastaddr,
+                  bootInfo_t *  bInfo)
+{
+    struct tms  theTimes;
+    clock_t start_time;       //time
+    clock_t end_time;         //time
+    float   seconds;
+
+    int    i;
+    unsigned char d1;
+    unsigned long addr;
+
+    start_time = times (&theTimes);
+
+    // Sending commands to MC
+    printf("Writing program memory...\n");
+    printf("Programming: 00000 - %05lX\n", lastaddr);
+    sendcommand(PROGRAM);
 
     // Sending data to MC
     addr = 0;
@@ -398,7 +444,7 @@ int flash (char         verify,
 
     while (i > 0)
     {
-        printActivity (verify, lastaddr, addr);
+        printPercentage ("Writing", lastaddr, addr);
 
         // first write one buffer
         while (i > 0)
@@ -410,13 +456,13 @@ int flash (char         verify,
                 com_putc(ESCAPE);
                 d1 += ESC_SHIFT;
             }
-            if (i % 8)
+            if (i % 12)
             {
                 com_putc_fast (d1);
             }
             else
             {
-                printActivity (verify, lastaddr, addr);
+                printPercentage ("Writing", lastaddr, addr);
                 com_putc (d1);
             }
             i--;
@@ -431,7 +477,7 @@ int flash (char         verify,
         if (i > 0)
         {
             // now check if it is correctly burned
-            if (!verify && (com_getc (TIMEOUTP) != CONTINUE))
+            if (com_getc (TIMEOUTP) != CONTINUE)
             {
                 printf("\n ---------- Failed! ----------\n");
                 free(data);
@@ -440,7 +486,7 @@ int flash (char         verify,
         }
     }
 
-    printActivity (verify, 100, 100);
+    printPercentage ("Writing", 100, 100);
 
     end_time = times (&theTimes);
     seconds  = (float)(end_time-start_time)/sysconf(_SC_CLK_TCK);
@@ -452,13 +498,11 @@ int flash (char         verify,
     com_putc(ESCAPE);
     com_putc(ESC_SHIFT); // A5,80 = End
 
-    free(data);
-
     if (com_getc(TIMEOUTP) == SUCCESS)
         return 1;
 
     return 0;
-}//int flash(char verify, const char * filename)
+}
 
 
 
@@ -657,8 +701,14 @@ int main(int argc, char *argv[])
     // Filename of the HEX File
     const char * hexfile = NULL;
 
-    // 1 if verify, 2 if programm
-    char verify = -1;
+    char    verify  = 0;
+    char    program = 0;
+
+    // pointer to the loaded and converted HEX-file
+    char    *data = NULL;
+
+    // last address in hexfile
+    unsigned long lastAddr = 0;
 
     // Serial device
     const char * device = "/dev/ttyS0";
@@ -678,47 +728,42 @@ int main(int argc, char *argv[])
 
     // Parsing / checking parameter
     int i;
-    int type = 0;
 
     for(i = 1; i < argc; i++)
     {
-        if(*argv[i] == '-')
+        if (strcmp (argv[i], "-d") == 0)
         {
-            type = argv[i][1];
+            i++;
+            if (i < argc)
+                device = argv[i];
+        }
+        else if (strcmp (argv[i], "-b") == 0)
+        {
+            i++;
+            if (i < argc)
+                baud = atoi(argv[i]);
+        }
+        else if (strcmp (argv[i], "-v") == 0)
+        {
+            verify = 1;
+        }
+        else if (strcmp (argv[i], "-p") == 0)
+        {
+            program = 1;
         }
         else
         {
-            switch(type)
-            {
-                case 'd':
-                    device = argv[i];
-                    break;
-                case 'b':
-                    baud = atoi(argv[i]);
-                    break;
-                case 'v':
-                    verify = 1;
-                    hexfile = argv[i];
-                    break;
-                case 'p':
-                    verify = 2;
-                    hexfile = argv[i];
-                    break;
-                default:
-                    printf("Wrong parameter!\n");
-                    usage();
-            }
-            type = 0;
+            hexfile = argv[i];
         }
     }
 
-    if(hexfile == NULL)
+    if (hexfile == NULL)
     {
         printf("No hexfile specified!\n");
         usage();
     }
 
-    if(verify == -1)
+    if ((verify == 0) && (program == 0))
     {
         printf("No Verify / Programm specified!\n");
         usage();
@@ -742,7 +787,12 @@ int main(int argc, char *argv[])
 
     printf("Device  : %s\n", device);
     printf("Baudrate: %i\n", baud);
-    printf("%s: %s\n", (verify == 1 ? "Verify  " : "Programm"), hexfile);
+    if (program)
+        printf ("Program ");
+    if (verify)
+        printf ("Verify");
+
+    printf("\nFile    : %s\n", hexfile);
     printf("-------------------------------------------------\n");
 
     if(!com_open(device, baud_const[baudid]))
@@ -752,15 +802,13 @@ int main(int argc, char *argv[])
         exit(2);
     }
 
+    // read file first
+    data = readHexfile (hexfile, bootInfo.flashsize, &lastAddr);
+
+    // now start with target...
     connect_device();
     crc_on = check_crc();
     read_info(&bootInfo);
-
-    /*if(read_info(&bootInfo)) {
-      }
-      else {
-      printf("Reading device information failed!\n");
-      }*/
 
     if(crc_on != 2)
     {
@@ -786,15 +834,30 @@ int main(int argc, char *argv[])
         printf("No CRC support.\n");
     }
 
-    if (flash(verify==1, hexfile, &bootInfo))
+    if (program)
     {
-        if ((crc_on != 2) && (check_crc() != 0))
-            printf("\n ---------- Failed (CRC)! ----------\n\n");
+        if (programFlash (data, lastAddr, &bootInfo))
+        {
+            if ((crc_on != 2) && (check_crc() != 0))
+                printf("\n ---------- Programming failed (wrong CRC)! ----------\n\n");
+            else
+                printf("\n ++++++++++ Programming successful! ++++++++++\n\n");
+        }
         else
-            printf("\n ++++++++++ Success! ++++++++++\n\n");
+            printf("\n ---------- Programming failed! ----------\n\n");
     }
-    else
-        printf("\n ---------- Failed! ----------\n\n");
+    if (verify)
+    {
+        if (verifyFlash (data, lastAddr, &bootInfo))
+        {
+            if ((crc_on != 2) && (check_crc() != 0))
+                printf("\n ---------- Verifying failed (wrong CRC)! ----------\n\n");
+            else
+                printf("\n ++++++++++ Verifying successful! ++++++++++\n\n");
+        }
+        else
+            printf("\n ---------- Verifying failed! ----------\n\n");
+    }
 
     printf("...starting application\n\n");
     sendcommand(START);         //start application
