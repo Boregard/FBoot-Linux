@@ -25,6 +25,7 @@ typedef struct bootInfo
     long    signature;
     long    buffsize;
     long    flashsize;
+    int     crc_on;
 } bootInfo_t;
 
 
@@ -257,18 +258,10 @@ long readval()
                 break;
 
             case 2:
-                val = val * 256 + i;
-                j= 1;
-                break;
-
             case 3:
-                val = val * 256 + i;
-                j= 2;
-                break;
-
             case 4:
                 val = val * 256 + i;
-                j= 3;
+                j--;
                 break;
 
             case 256:
@@ -298,7 +291,7 @@ void printPercentage (char          *text,
                       unsigned long full_val,
                       unsigned long cur_val)
 {
-    static char percline[1024];
+    int         i;
     int         cur_perc;
     int         cur100p;
     int         txtLen = 10;    // length of the add. text 2 * " | " "100%"
@@ -315,27 +308,15 @@ void printPercentage (char          *text,
     }
     cur100p  = columns - txtLen;
     cur_perc = (cur_val * cur100p) / full_val;
-    memset (percline, ' ', cur100p);
-    memset (percline, '#', cur_perc);
-    percline[cur100p] = '\0';
 
-    printf ("%s | %s | %3d%%\r",
-            text ? text : "",
-            percline,
-            (int)((cur_val * 100) / full_val));
+    printf ("%s | ", text ? text : "");
+
+    for (i = 0; i < cur_perc; i++) printf ("#");
+    for (     ; i < cur100p;  i++) printf (" ");
+
+    printf (" | %3d%%\r", (int)((cur_val * 100) / full_val));
 
     fflush(stdout);
-}
-
-
-void printActivity (char          verify,
-                    unsigned long full_val,
-                    unsigned long cur_val)
-{
-    if (verify)
-        printPercentage ("Verifying", full_val, cur_val);
-    else
-        printPercentage ("Writing", full_val, cur_val);
 }
 
 
@@ -538,7 +519,7 @@ void connect_device()
     {
         printf("\b%c", ANIM_CHARS[state]);
         fflush(stdout);
-
+////////////check for echo ....
         com_puts(PASSWORD);
 //        usleep(10000);//wait 10ms
         in = com_getc(1);
@@ -609,6 +590,8 @@ int read_info (bootInfo_t *bInfo)
     long i, j;
     char s[256];
     FILE *fp;
+
+    bInfo->crc_on = check_crc();
 
     sendcommand(REVISION);
 
@@ -683,7 +666,31 @@ int read_info (bootInfo_t *bInfo)
     }
     bInfo->flashsize = i;
 
-    printf("Size available: %ld Byte\n\n", i );
+    printf("Size available: %ld Byte\n", i );
+
+    if(bInfo->crc_on != 2)
+    {
+        bInfo->crc_on = check_crc();
+        switch(bInfo->crc_on)
+        {
+            case 2:
+                printf("No CRC support.\n");
+                break;
+            case 0:
+                printf("CRC enabled and OK.\n");
+                break;
+            case 3:
+                printf("CRC check failed!\n");
+                break;
+            default:
+                printf("Checking CRC Error (%i)!\n", bInfo->crc_on);
+                break;
+        }
+    }
+    else
+    {
+        printf("No CRC support.\n\n");
+    }
 
     return 1;
 }//int read_info()
@@ -716,9 +723,6 @@ int main(int argc, char *argv[])
     // Baudrate
     int baud = 4800;
     int baudid = -1;
-
-    // if crc is supported (not supportet if 2)
-    int crc_on;
 
     // print header
     printf("\n");
@@ -807,38 +811,13 @@ int main(int argc, char *argv[])
 
     // now start with target...
     connect_device();
-    crc_on = check_crc();
     read_info(&bootInfo);
-
-    if(crc_on != 2)
-    {
-        crc_on = check_crc();
-        switch(crc_on)
-        {
-            case 2:
-                printf("No CRC support.\n");
-                break;
-            case 0:
-                printf("CRC enabled and OK.\n");
-                break;
-            case 3:
-                printf("CRC check failed!\n");
-                break;
-            default:
-                printf("Checking CRC Error (%i)!\n", crc_on);
-                break;
-        }
-    }
-    else
-    {
-        printf("No CRC support.\n");
-    }
 
     if (program)
     {
         if (programFlash (data, lastAddr, &bootInfo))
         {
-            if ((crc_on != 2) && (check_crc() != 0))
+            if ((bootInfo.crc_on != 2) && (check_crc() != 0))
                 printf("\n ---------- Programming failed (wrong CRC)! ----------\n\n");
             else
                 printf("\n ++++++++++ Programming successful! ++++++++++\n\n");
@@ -850,7 +829,7 @@ int main(int argc, char *argv[])
     {
         if (verifyFlash (data, lastAddr, &bootInfo))
         {
-            if ((crc_on != 2) && (check_crc() != 0))
+            if ((bootInfo.crc_on != 2) && (check_crc() != 0))
                 printf("\n ---------- Verifying failed (wrong CRC)! ----------\n\n");
             else
                 printf("\n ++++++++++ Verifying successful! ++++++++++\n\n");

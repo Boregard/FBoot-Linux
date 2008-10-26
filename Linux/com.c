@@ -24,6 +24,8 @@ struct termios oldtio;
 // CRC checksum
 unsigned int crc = 0;
 
+int sendCount = 0;
+
 /// Prototypes
 void calc_crc(unsigned char d);
 
@@ -79,6 +81,8 @@ char com_open(const char * device, speed_t baud)
     // aplying new configuration
     tcsetattr(fd, TCSANOW, &newtio);
 
+    sendCount = 0;
+
     return 1;
 }
 
@@ -96,35 +100,29 @@ void com_close()
 }
 
 /**
- * Sends one char
- */
-void com_putc_fast(unsigned char c)
-{
-    write(fd, &c, 1);
-    calc_crc( c ); // calculate transmit CRC
-}
-
-void com_putc(unsigned char c) 
-{
-    tcdrain(fd);
-    write(fd, &c, 1);
-    calc_crc( c ); // calculate transmit CRC
-}
-
-
-/**
- * Recives one char or -1 if timeout
+ * Receives one char or -1 if timeout
  * timeout in 10th of seconds
  */
 int com_getc(int timeout) 
 {
     static long         ticks = 0;
     static struct tms   theTimes;
-    char c;
-    clock_t t = times (&theTimes);
+    char    c;
+    clock_t t;
 
     if (ticks == 0)
         ticks = sysconf(_SC_CLK_TCK) / 10;
+
+    if (sendCount > 1)
+    {
+        while (read(fd, &c, 1) == 1)
+        {
+            sendCount--;
+            if (sendCount == 1) 
+                break;
+        } 
+    }
+    t = times (&theTimes);
 
     //active polling!
     while ( !read(fd, &c, 1) ) 
@@ -136,6 +134,31 @@ int com_getc(int timeout)
     }
     return (unsigned char)c;
 }
+
+/**
+ * Sends one char
+ */
+void com_putc_fast(unsigned char c)
+{
+    char a;
+
+    if (sendCount > 1)
+    {
+        if (read(fd, &a, 1))
+            sendCount--;
+//        com_getc(0);
+        sendCount++;
+    }
+    write(fd, &c, 1);
+    calc_crc( c ); // calculate transmit CRC
+}
+
+void com_putc(unsigned char c) 
+{
+    tcdrain(fd);
+    com_putc_fast (c);
+}
+
 
 /**
  * Flushes the buffer
