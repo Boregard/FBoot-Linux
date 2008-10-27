@@ -510,8 +510,10 @@ void connect_device()
     const char * ANIM_CHARS = "-\\|/";
     const char PASSWORD[6] = {'P', 'e', 'd', 'a', 0xff, 0};
 
+    int i;
     int state = 0;
     int in = 0;
+    int oldin = 0;
 
     printf("Waiting for device... Press CTRL+C to exit.  ");
 
@@ -520,12 +522,31 @@ void connect_device()
         printf("\b%c", ANIM_CHARS[state]);
         fflush(stdout);
 ////////////check for echo ....
-        com_puts(PASSWORD);
+#if 0
+        i = 0;
+        while (PASSWORD[i] != '\0')
+        {
+            com_putc (PASSWORD[i]);
+            in = com_getc(1);
+            if (in != PASSWORD[i])
+                printf ("------------------------------------------------------\n");
+            oldin = in;
+//            if (in == PASSWORD[0])
+//                com_localecho();
+            printf ("- send: '%c' %02x rec: '%c' %02x\n", 
+                    PASSWORD[i], PASSWORD[i], in & 0x00ff, in & 0x00ff);
+            i++;
+//        com_puts(PASSWORD);
 //        usleep(10000);//wait 10ms
-        in = com_getc(1);
+//        in = com_getc(1);
+#else
+        com_puts(PASSWORD);
 
+        in = com_getc(1);
+#endif
         if(in == CONNECT)
         {
+                        printf("\n...Connected!\n");
             sendcommand(COMMAND);
 
             // Empty buffer
@@ -541,6 +562,7 @@ void connect_device()
                         exit (0);
                 }
             }
+//        }
         }
         state++;
         state = state % 4;

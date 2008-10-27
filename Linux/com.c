@@ -38,6 +38,16 @@ unsigned long baud_value[BAUD_CNT] = { 50, 75, 110, 134, 150, 200, 300, 600,
 
 
 /**
+ * Set flag for one-wire local echo
+ *
+ */
+void com_localecho ()
+{
+    sendCount = 1;
+}
+
+
+/**
  * Opens com port
  *
  * @return true if successfull
@@ -60,7 +70,7 @@ char com_open(const char * device, speed_t baud)
     memset(&newtio, 0x00 , sizeof(newtio));
 
     // settings flags
-    newtio.c_cflag = CS8 | CLOCAL | CREAD;
+    newtio.c_cflag = CS8 | CLOCAL | CREAD; // | CSTOPB;
     newtio.c_iflag = IGNPAR | IGNBRK;
     newtio.c_oflag = 0;
     newtio.c_lflag = 0;
@@ -142,7 +152,7 @@ void com_putc_fast(unsigned char c)
 {
     char a;
 
-    if (sendCount > 1)
+    if (sendCount > 0)
     {
         if (read(fd, &a, 1))
             sendCount--;

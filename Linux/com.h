@@ -24,6 +24,12 @@ extern unsigned int crc;
 /// Prototypes
 
 /**
+ * Set flag for one-wire local echo
+ *
+ */
+void com_localecho ();
+
+/**
  * Opens com port
  *
  * @return true if successfull
