@@ -3,7 +3,7 @@
  *
  * License: GPL
  *
- * @author Andreas Butti
+ * @author Bernhard Michler, based on source of Andreas Butti
  */
 
 
@@ -131,14 +131,12 @@ int com_getc(int timeout)
     {
         if (read(fd, &c, 1))
         {
-//            printf (" read: %c %02X", c, c & 0x00ff);
             if (sendCount > 1)
             {
                 sendCount--;
                 t = times (&theTimes);
                 continue;
             }
-//            printf ("\n");
             return (unsigned char)c;
         }
     } while ( ((times (&theTimes) - t )/ticks) < timeout );
@@ -146,31 +144,20 @@ int com_getc(int timeout)
     return -1;
 }
 
+
 /**
  * Sends one char
  */
 void com_putc_fast(unsigned char c)
 {
-    char a;
-
-#if 1
     if (sendCount)
     {
         if (sendCount > 1)
             com_getc(0);
         sendCount++;
     }
-#else
-    if (sendCount > 0)
-    {
-        if (read(fd, &a, 1))
-            sendCount--;
-//        com_getc(0);
-        sendCount++;
-    }
-#endif
+
     write(fd, &c, 1);
-//    printf ("Snd: '%c' %02X\n", c, c);
     calc_crc( c ); // calculate transmit CRC
 }
 
@@ -190,28 +177,9 @@ void sendcommand(unsigned char c)
         sendCount = 1;
     com_putc(COMMAND);
     com_putc(c);
+    tcdrain(fd);
 }
 
-
-/**
- * Flushes the buffer
- */
-void com_flush() 
-{
-    // Flushing buffer
-    tcflush(fd, TCIOFLUSH);
-}
-
-/**
- * Sends a string
- */
-void com_puts(const char *text) 
-{
-    while(*text) 
-    {
-        com_putc( *text++);
-    }
-}
 
 /**
  * Calculate the new CRC sum

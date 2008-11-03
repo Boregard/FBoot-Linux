@@ -52,15 +52,6 @@ void com_putc(unsigned char c);
  */
 int com_getc(int timeout);
 
-/**
- * Flushes the buffer
- */
-void com_flush();
-
-/**
- * Sends a string
- */
-void com_puts(const char *text);
 
 /**
  * Sending a command

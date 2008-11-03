@@ -2,7 +2,7 @@
  * Bootloader um dem Mikrocontroller Bootloader von Peter Dannegger anzusteuern
  * Teile des Codes sind vom original Booloader von Peter Dannegger (danni@alice-dsl.net)
  *
- * @author Andreas Butti
+ * @author Bernhard Michler, based on source of Andreas Butti
  */
 
 
@@ -273,6 +273,7 @@ long readval()
                 return -2;
         }
     }
+    return -2;
 }
 
 /**
@@ -331,14 +332,13 @@ int verifyFlash (char        * data,
 
     // Sending commands to MC
     sendcommand(VERIFY);
-    printf("Verifying program memory...\n");
 
     if(com_getc(TIMEOUT) == BADCOMMAND)
     {
         printf("Verify not available\n");
         return 0;
     }
-    printf( "Verify: 00000 - %05lX\n", lastaddr);
+    printf( "Verify        : 00000 - %05lX\n", lastaddr);
 
     // Sending data to MC
     addr = 0;
@@ -346,6 +346,9 @@ int verifyFlash (char        * data,
 
     while (i > 0)
     {
+        if ((i % 16) == 0)
+            printPercentage ("Verifying", lastaddr, addr);
+
         d1 = data[addr];
 
         if ((d1 == ESCAPE) || (d1 == 0x13))
@@ -353,13 +356,12 @@ int verifyFlash (char        * data,
             com_putc(ESCAPE);
             d1 += ESC_SHIFT;
         }
-        if (i % bInfo->txBlockSize)
+        if ((i > 1) && (i % 12))
         {
             com_putc_fast (d1);
         }
         else
         {
-            printPercentage ("Verifying", lastaddr, addr);
             com_putc (d1);
         }
         i--;
@@ -404,8 +406,7 @@ int programFlash (char        * data,
     start_time = times (&theTimes);
 
     // Sending commands to MC
-    printf("Writing program memory...\n");
-    printf("Programming: 00000 - %05lX\n", lastaddr);
+    printf("Programming   : 00000 - %05lX\n", lastaddr);
     sendcommand(PROGRAM);
 
     // Sending data to MC
@@ -421,6 +422,9 @@ int programFlash (char        * data,
         // first write one buffer
         while (i > 0)
         {
+            if ((i % 16) == 0)
+                printPercentage ("Writing", lastaddr, addr);
+
             d1 = data[addr];
 
             if ((d1 == ESCAPE) || (d1 == 0x13))
@@ -428,15 +432,11 @@ int programFlash (char        * data,
                 com_putc(ESCAPE);
                 d1 += ESC_SHIFT;
             }
-            if (i % bInfo->txBlockSize)
-            {
+            if (i % 12)
                 com_putc_fast (d1);
-            }
             else
-            {
-                printPercentage ("Writing", lastaddr, addr);
                 com_putc (d1);
-            }
+
             i--;
             addr++;
         }
@@ -502,22 +502,20 @@ void connect_device()
     const char * ANIM_CHARS = "-\\|/";
     const char PASSWORD[6] = {'P', 'e', 'd', 'a', 0xff, 0};
 
-    int i;
+#if 1
     int localecho = 0;
     int state = 0;
     int in = 0;
-    int oldin = 0;
 
-    printf("Waiting for device... Press CTRL+C to exit.  ");
-#if 1
-    for (;;)
+    printf("Waiting for device...  ");
+
+    while (1)
     {
-        printf("\b%c", ANIM_CHARS[state]);
-        state++;
-        state = state % 4;
+        usleep (25000);     // just to slow animation...
+        printf("\b%c", ANIM_CHARS[state++ & 3]);
         fflush(stdout);
 
-        char *s = PASSWORD;
+        const char *s = PASSWORD;
 
         do 
         {
@@ -529,23 +527,27 @@ void connect_device()
 
             if (in == CONNECT)
             {
-                printf ("\n");
-#if 1
                 if (localecho)
                 {
-                    printf ("One wire!\n");
+                    while (com_getc(TIMEOUT) != -1);
+
+                    printf ("\bconnected (one wire)!\n");
                     com_localecho();
                 }
-#endif
+                else 
+                {
+                    printf ("\bconnected!\n");
+                }
+
                 sendcommand( COMMAND );
-                for(;;)
+
+                while (1)
                 {
                     switch(com_getc(TIMEOUT))
                     {
                         case SUCCESS:
-                            printf (" Success\n");
                         case -1:
-                            return 0;
+                            return;
                     }
                 }
 
@@ -554,6 +556,12 @@ void connect_device()
         } while (*s++);
     }
 #else
+    int i;
+    int localecho = 0;
+    int state = 0;
+    int in = 0;
+
+    printf("Waiting for device...  ");
     while(1)
     {
 ////////////check for echo ....
@@ -656,13 +664,12 @@ int read_info (bootInfo_t *bInfo)
     FILE *fp;
 
     bInfo->crc_on = check_crc();
-
     sendcommand(REVISION);
 
     i = readval();
     if(i == -2)
     {
-        printf("Bootloader Version unknonwn (Fail)\n");
+        printf("Bootloader Version unknown (Fail)\n");
         bInfo->revision = -1;
     }
     else
@@ -862,12 +869,18 @@ int main(int argc, char *argv[])
 
     printf("Device  : %s\n", device);
     printf("Baudrate: %i\n", baud);
-    if (program)
-        printf ("Program ");
-    if (verify)
-        printf ("Verify");
-
-    printf("\nFile    : %s\n", hexfile);
+    printf("File    : %s\n", hexfile);
+    if (program & verify)
+    {
+        printf ("Program and verify device.\n");
+    }
+    else
+    {
+        if (program)
+            printf ("Program device.\n");
+        if (verify)
+            printf ("Verify device.\n");
+    }
     printf("-------------------------------------------------\n");
 
     if(!com_open(device, baud_const[baudid]))
