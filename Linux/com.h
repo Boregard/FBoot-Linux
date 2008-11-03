@@ -15,7 +15,7 @@
 
 // Baudrate definitions
 
-#define BAUD_CNT 17
+#define BAUD_CNT 18
 
 extern speed_t baud_const[BAUD_CNT];
 extern unsigned long baud_value[BAUD_CNT];
@@ -62,5 +62,9 @@ void com_flush();
  */
 void com_puts(const char *text);
 
+/**
+ * Sending a command
+ */
+void sendcommand(unsigned char c);
 
 #endif //COM_H_INCLUDED

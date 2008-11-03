@@ -26,6 +26,7 @@ typedef struct bootInfo
     long    buffsize;
     long    flashsize;
     int     crc_on;
+    int     txBlockSize;
 } bootInfo_t;
 
 
@@ -219,16 +220,6 @@ char * readHexfile(const char * filename, int flashsize, unsigned long * lastadd
 
 
 /**
- * Sending a command
- */
-void sendcommand(unsigned char c)
-{
-    com_putc(COMMAND);
-    com_putc(c);
-}
-
-
-/**
  * Reads a value from bootloader
  *
  * @return value; -2 on error; exit on timeout
@@ -362,7 +353,7 @@ int verifyFlash (char        * data,
             com_putc(ESCAPE);
             d1 += ESC_SHIFT;
         }
-        if (i % 12)
+        if (i % bInfo->txBlockSize)
         {
             com_putc_fast (d1);
         }
@@ -437,7 +428,7 @@ int programFlash (char        * data,
                 com_putc(ESCAPE);
                 d1 += ESC_SHIFT;
             }
-            if (i % 12)
+            if (i % bInfo->txBlockSize)
             {
                 com_putc_fast (d1);
             }
@@ -495,6 +486,7 @@ void usage()
     printf("./booloader [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex\n");
     printf("-d Device\n");
     printf("-b Baudrate\n");
+    printf("-t TxD Blocksize\n");
     printf("-v Verify\n");
     printf("-p Programm\n\n");
     printf("Author: Andreas Butti (andreasbutti@bluewin.ch)\n");
@@ -511,43 +503,92 @@ void connect_device()
     const char PASSWORD[6] = {'P', 'e', 'd', 'a', 0xff, 0};
 
     int i;
+    int localecho = 0;
     int state = 0;
     int in = 0;
     int oldin = 0;
 
     printf("Waiting for device... Press CTRL+C to exit.  ");
-
-    while(1)
+#if 1
+    for (;;)
     {
         printf("\b%c", ANIM_CHARS[state]);
+        state++;
+        state = state % 4;
         fflush(stdout);
+
+        char *s = PASSWORD;
+
+        do 
+        {
+            com_putc(*s);
+
+            in = com_getc(0);
+            if (in == PASSWORD[1])
+                localecho = 1;
+
+            if (in == CONNECT)
+            {
+                printf ("\n");
+#if 1
+                if (localecho)
+                {
+                    printf ("One wire!\n");
+                    com_localecho();
+                }
+#endif
+                sendcommand( COMMAND );
+                for(;;)
+                {
+                    switch(com_getc(TIMEOUT))
+                    {
+                        case SUCCESS:
+                            printf (" Success\n");
+                        case -1:
+                            return 0;
+                    }
+                }
+
+            }
+
+        } while (*s++);
+    }
+#else
+    while(1)
+    {
 ////////////check for echo ....
-#if 0
+#if 1
         i = 0;
         while (PASSWORD[i] != '\0')
         {
             com_putc (PASSWORD[i]);
-            in = com_getc(1);
-            if (in != PASSWORD[i])
-                printf ("------------------------------------------------------\n");
-            oldin = in;
-//            if (in == PASSWORD[0])
-//                com_localecho();
-            printf ("- send: '%c' %02x rec: '%c' %02x\n", 
-                    PASSWORD[i], PASSWORD[i], in & 0x00ff, in & 0x00ff);
+            in = com_getc(0);
+            if (in == PASSWORD[0])
+                com_localecho();
+//            printf ("- send: '%c' %02x rec: '%c' %02x\n", 
+//                    PASSWORD[i], PASSWORD[i] & 0x00ff, in & 0x00ff, in & 0x00ff);
             i++;
 //        com_puts(PASSWORD);
 //        usleep(10000);//wait 10ms
 //        in = com_getc(1);
 #else
+        printf("\b%c", ANIM_CHARS[state]);
+        fflush(stdout);
+
         com_puts(PASSWORD);
 
         in = com_getc(1);
 #endif
         if(in == CONNECT)
         {
-                        printf("\n...Connected!\n");
+            printf("\n...Connect...!\n");
+            while (com_getc(1) >= 0);
+
+        usleep(10000);//wait 10ms
+            printf("\n...Send Command!\n");
             sendcommand(COMMAND);
+//            com_putc(COMMAND);
+//            com_getc(1);
 
             // Empty buffer
             while(1)
@@ -562,11 +603,12 @@ void connect_device()
                         exit (0);
                 }
             }
-//        }
+        }
         }
         state++;
         state = state % 4;
     }
+#endif
 }//void connect_device()
 
 
@@ -742,9 +784,10 @@ int main(int argc, char *argv[])
     // Serial device
     const char * device = "/dev/ttyS0";
 
-    // Baudrate
+    // default values
     int baud = 4800;
     int baudid = -1;
+    bootInfo.txBlockSize = 16;
 
     // print header
     printf("\n");
@@ -776,6 +819,12 @@ int main(int argc, char *argv[])
         else if (strcmp (argv[i], "-p") == 0)
         {
             program = 1;
+        }
+        else if (strcmp (argv[i], "-t") == 0)
+        {
+            i++;
+            if (i < argc)
+                bootInfo.txBlockSize = atoi(argv[i]);
         }
         else
         {

@@ -8,11 +8,13 @@
 
 
 /// Includes
+#include <stdio.h>
 #include <time.h>
 #include <string.h>
 #include <sys/times.h>
 
 #include "com.h"
+#include "protocol.h"
 
 
 /// Attributes
@@ -31,10 +33,12 @@ void calc_crc(unsigned char d);
 
 
 speed_t baud_const[BAUD_CNT] = { B50, B75, B110, B134, B150, B200, B300, B600,
-        B1200, B1800, B2400, B4800, B9600, B19200, B38400, B57600, B115200 };
+                                 B1200, B1800, B2400, B4800, B9600, B19200, 
+                                 B38400, B57600, B115200, B230400 };
 
 unsigned long baud_value[BAUD_CNT] = { 50, 75, 110, 134, 150, 200, 300, 600,
-        1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200 };
+                                       1200, 1800, 2400, 4800, 9600, 19200,
+                                       38400, 57600, 115200, 230400 };
 
 
 /**
@@ -118,31 +122,28 @@ int com_getc(int timeout)
     static long         ticks = 0;
     static struct tms   theTimes;
     char    c;
-    clock_t t;
+    clock_t t = times (&theTimes);
 
     if (ticks == 0)
         ticks = sysconf(_SC_CLK_TCK) / 10;
 
-    if (sendCount > 1)
+    do 
     {
-        while (read(fd, &c, 1) == 1)
+        if (read(fd, &c, 1))
         {
-            sendCount--;
-            if (sendCount == 1) 
-                break;
-        } 
-    }
-    t = times (&theTimes);
-
-    //active polling!
-    while ( !read(fd, &c, 1) ) 
-    {
-        if ( ((times (&theTimes) - t )/ticks) >= timeout ) 
-        {
-           return -1;
+//            printf (" read: %c %02X", c, c & 0x00ff);
+            if (sendCount > 1)
+            {
+                sendCount--;
+                t = times (&theTimes);
+                continue;
+            }
+//            printf ("\n");
+            return (unsigned char)c;
         }
-    }
-    return (unsigned char)c;
+    } while ( ((times (&theTimes) - t )/ticks) < timeout );
+
+    return -1;
 }
 
 /**
@@ -152,6 +153,14 @@ void com_putc_fast(unsigned char c)
 {
     char a;
 
+#if 1
+    if (sendCount)
+    {
+        if (sendCount > 1)
+            com_getc(0);
+        sendCount++;
+    }
+#else
     if (sendCount > 0)
     {
         if (read(fd, &a, 1))
@@ -159,7 +168,9 @@ void com_putc_fast(unsigned char c)
 //        com_getc(0);
         sendCount++;
     }
+#endif
     write(fd, &c, 1);
+//    printf ("Snd: '%c' %02X\n", c, c);
     calc_crc( c ); // calculate transmit CRC
 }
 
@@ -167,6 +178,18 @@ void com_putc(unsigned char c)
 {
     tcdrain(fd);
     com_putc_fast (c);
+}
+
+
+/**
+ * Sending a command
+ */
+void sendcommand(unsigned char c)
+{
+    if (sendCount)
+        sendCount = 1;
+    com_putc(COMMAND);
+    com_putc(c);
 }
 
 
