@@ -40,8 +40,8 @@ typedef struct
     speed_t         baudConst;
 } baudInfo_t;
 baudInfo_t baudRates[] = { 
-    {     50,      B50 },
-    {     75,      B75 },
+    {     50,     B50 },
+    {     75,     B75 },
     {    110,    B110 },
     {    134,    B134 },
     {    150,    B150 },
@@ -812,7 +812,7 @@ int main(int argc, char *argv[])
     char    *data = NULL;
 
     // pointer to password...
-    char    *password = "Peda";
+    char    *password = "BMIa";
 
     // last address in hexfile
     unsigned long lastAddr = 0;

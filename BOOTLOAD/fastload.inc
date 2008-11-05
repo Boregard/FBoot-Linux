@@ -46,7 +46,7 @@ connected:
 .include "uart.inc"			; UART subroutines
 ;-------------------------------------------------------------------------
 Password:
-	.db	"Peda", 0, 0		; 'a' was recognized by ABAUD
+	.db	"BMIa", 0, 0		; 'a' was recognized by ABAUD
 .list
 Messages:
 	.db 3, high(Version), low(Version), \
