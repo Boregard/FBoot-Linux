@@ -32,15 +32,6 @@ int sendCount = 0;
 void calc_crc(unsigned char d);
 
 
-speed_t baud_const[BAUD_CNT] = { B50, B75, B110, B134, B150, B200, B300, B600,
-                                 B1200, B1800, B2400, B4800, B9600, B19200, 
-                                 B38400, B57600, B115200, B230400 };
-
-unsigned long baud_value[BAUD_CNT] = { 50, 75, 110, 134, 150, 200, 300, 600,
-                                       1200, 1800, 2400, 4800, 9600, 19200,
-                                       38400, 57600, 115200, 230400 };
-
-
 /**
  * Set flag for one-wire local echo
  *

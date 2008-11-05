@@ -34,6 +34,32 @@ typedef struct bootInfo
 #define TIMEOUT   3  // 0.3s
 #define TIMEOUTP  40 // 4s
 
+typedef struct
+{
+    unsigned long   baudValue;
+    speed_t         baudConst;
+} baudInfo_t;
+baudInfo_t baudRates[] = { 
+    {     50,      B50 },
+    {     75,      B75 },
+    {    110,    B110 },
+    {    134,    B134 },
+    {    150,    B150 },
+    {    200,    B200 },
+    {    300,    B300 },
+    {    600,    B600 },
+    {   1200,   B1200 },
+    {   1800,   B1800 },
+    {   2400,   B2400 },
+    {   4800,   B4800 },
+    {   9600,   B9600 },
+    {  19200,  B19200 },
+    {  38400,  B38400 },
+    {  57600,  B57600 },
+    { 115200, B115200 },
+    { 230400, B230400 }
+};
+
 
 /**
  * reads hex data from string
@@ -182,7 +208,7 @@ char * readHexfile(const char * filename, int flashsize, unsigned long * lastadd
         exit(0);
     }
 
-    printf("Reading %s... ", filename);
+    printf("Reading : %s... ", filename);
 
 
     // reading file to "data"
@@ -194,7 +220,7 @@ char * readHexfile(const char * filename, int flashsize, unsigned long * lastadd
             {
                 fclose(fp);
                 free(data);
-                printf("Hex-file to large for target!\n");
+                printf("\n  Hex-file to large for target!\n");
                 return NULL;
             }
             for(x = 0; x < len; x++)
@@ -356,14 +382,11 @@ int verifyFlash (char        * data,
             com_putc(ESCAPE);
             d1 += ESC_SHIFT;
         }
-        if ((i > 1) && (i % 12))
-        {
+        if (i % bInfo->txBlockSize)
             com_putc_fast (d1);
-        }
         else
-        {
             com_putc (d1);
-        }
+
         i--;
         addr++;
     }
@@ -432,7 +455,7 @@ int programFlash (char        * data,
                 com_putc(ESCAPE);
                 d1 += ESC_SHIFT;
             }
-            if (i % 12)
+            if (i % bInfo->txBlockSize)
                 com_putc_fast (d1);
             else
                 com_putc (d1);
@@ -488,8 +511,9 @@ void usage()
     printf("-b Baudrate\n");
     printf("-t TxD Blocksize\n");
     printf("-v Verify\n");
-    printf("-p Programm\n\n");
-    printf("Author: Andreas Butti (andreasbutti@bluewin.ch)\n");
+    printf("-p Programm\n");
+    printf("-P Password\n");
+    printf("Author: Bernhard Michler (based on code from Andreas Butti)\n");
 
     exit(1);
 }
@@ -497,10 +521,9 @@ void usage()
 /**
  * Try to connect a device
  */
-void connect_device()
+void connect_device ( char *password )
 {
     const char * ANIM_CHARS = "-\\|/";
-    const char PASSWORD[6] = {'P', 'e', 'd', 'a', 0xff, 0};
 
 #if 1
     int localecho = 0;
@@ -515,14 +538,17 @@ void connect_device()
         printf("\b%c", ANIM_CHARS[state++ & 3]);
         fflush(stdout);
 
-        const char *s = PASSWORD;
+        const char *s = password;
 
         do 
         {
-            com_putc(*s);
+            if (*s)
+                com_putc(*s);
+            else
+                com_putc(0x0ff);
 
             in = com_getc(0);
-            if (in == PASSWORD[1])
+            if (in == password[1])
                 localecho = 1;
 
             if (in == CONNECT)
@@ -785,6 +811,9 @@ int main(int argc, char *argv[])
     // pointer to the loaded and converted HEX-file
     char    *data = NULL;
 
+    // pointer to password...
+    char    *password = "Peda";
+
     // last address in hexfile
     unsigned long lastAddr = 0;
 
@@ -833,6 +862,12 @@ int main(int argc, char *argv[])
             if (i < argc)
                 bootInfo.txBlockSize = atoi(argv[i]);
         }
+        else if (strcmp (argv[i], "-P") == 0)
+        {
+            i++;
+            if (i < argc)
+                password = argv[i];
+        }
         else
         {
             hexfile = argv[i];
@@ -852,9 +887,9 @@ int main(int argc, char *argv[])
     }
 
     // Checking baudrate
-    for(i = 0; i < BAUD_CNT; i++)
+    for(i = 0; i < (sizeof (baudRates) / sizeof (baudInfo_t)); i++)
     {
-        if (baud_value[i] == baud)
+        if (baudRates[i].baudValue == baud)
         {
             baudid = i;
             break;
@@ -863,13 +898,23 @@ int main(int argc, char *argv[])
 
     if(baudid == -1)
     {
-        printf("Unknown baudrate (%i)!\n", baud);
+        printf("Unknown baudrate (%i)!\nUse one of:", baud);
+        for(i = 0; i < (sizeof (baudRates) / sizeof (baudInfo_t)); i++)
+        {
+            printf (" %ld", baudRates[i].baudValue);
+        }
+        printf ("\n");
         usage();
     }
 
-    printf("Device  : %s\n", device);
+    printf("Port    : %s\n", device);
     printf("Baudrate: %i\n", baud);
     printf("File    : %s\n", hexfile);
+
+    // read file first
+    data = readHexfile (hexfile, bootInfo.flashsize, &lastAddr);
+    printf("Size    : %ld Bytes\n", lastAddr);
+
     if (program & verify)
     {
         printf ("Program and verify device.\n");
@@ -883,19 +928,16 @@ int main(int argc, char *argv[])
     }
     printf("-------------------------------------------------\n");
 
-    if(!com_open(device, baud_const[baudid]))
+    if(!com_open(device, baudRates[baudid].baudConst))
     {
         printf("Opening com port \"%s\" failed (%s)!\n", 
                device, strerror (errno));
         exit(2);
     }
 
-    // read file first
-    data = readHexfile (hexfile, bootInfo.flashsize, &lastAddr);
-
     // now start with target...
-    connect_device();
-    read_info(&bootInfo);
+    connect_device (password);
+    read_info (&bootInfo);
 
     if (program)
     {
