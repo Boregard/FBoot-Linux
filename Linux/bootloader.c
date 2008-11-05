@@ -61,6 +61,37 @@ baudInfo_t baudRates[] = {
 };
 
 
+typedef struct
+{
+    unsigned long   id;
+    const char      *name;
+} avrdev_t;
+avrdev_t avrDevices[] = {
+    { 0x01e9007,    "ATtiny13" },
+    { 0x01e910a,    "ATtiny2313" },
+    { 0x01e9205,    "ATmega48" },
+    { 0x01e9206,    "ATtiny45" },
+    { 0x01e9207,    "ATtiny44" },
+    { 0x01e9208,    "ATtiny461" },
+    { 0x01e9306,    "ATmega8515" },
+    { 0x01e9307,    "ATmega8" },
+    { 0x01e9308,    "ATmega8535" },
+    { 0x01e930a,    "ATmega88" },
+    { 0x01e930b,    "ATtiny85" },
+    { 0x01e930c,    "ATtiny84" },
+    { 0x01e930d,    "ATtiny861" },
+    { 0x01e930f,    "ATmega88P" },
+    { 0x01e9403,    "ATmega16" },
+    { 0x01e9404,    "ATmega162" },
+    { 0x01e9406,    "ATmega168" },
+    { 0x01e9501,    "ATmega323" },
+    { 0x01e9502,    "ATmega32" },
+    { 0x01e9609,    "ATmega644" },
+    { 0x01e9802,    "ATmega2561" }
+};
+    
+
+
 /**
  * reads hex data from string
  */
@@ -668,8 +699,20 @@ int read_info (bootInfo_t *bInfo)
     }
     else
     {
-        sscanf ("(?)" , "%s", s);
-        printf("File \"devices.txt\" not found!\n");
+        // search locally...
+        for (j = 0; j < (sizeof (avrDevices) / sizeof (avrdev_t)); j++)
+        {
+            if (i == avrDevices[j].id)
+            {
+                strcpy (s, avrDevices[j].name);
+                break;
+            }
+        }
+        if (j == (sizeof (avrDevices) / sizeof (avrdev_t)))
+        {
+            sscanf ("(?)" , "%s", s);
+            printf("File \"devices.txt\" not found!\n");
+        }
     }
     printf("Target        : %06lX %s\n", i, s);
 
