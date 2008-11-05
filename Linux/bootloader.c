@@ -525,7 +525,6 @@ void connect_device ( char *password )
 {
     const char * ANIM_CHARS = "-\\|/";
 
-#if 1
     int localecho = 0;
     int state = 0;
     int in = 0;
@@ -581,68 +580,6 @@ void connect_device ( char *password )
 
         } while (*s++);
     }
-#else
-    int i;
-    int localecho = 0;
-    int state = 0;
-    int in = 0;
-
-    printf("Waiting for device...  ");
-    while(1)
-    {
-////////////check for echo ....
-#if 1
-        i = 0;
-        while (PASSWORD[i] != '\0')
-        {
-            com_putc (PASSWORD[i]);
-            in = com_getc(0);
-            if (in == PASSWORD[0])
-                com_localecho();
-//            printf ("- send: '%c' %02x rec: '%c' %02x\n", 
-//                    PASSWORD[i], PASSWORD[i] & 0x00ff, in & 0x00ff, in & 0x00ff);
-            i++;
-//        com_puts(PASSWORD);
-//        usleep(10000);//wait 10ms
-//        in = com_getc(1);
-#else
-        printf("\b%c", ANIM_CHARS[state]);
-        fflush(stdout);
-
-        com_puts(PASSWORD);
-
-        in = com_getc(1);
-#endif
-        if(in == CONNECT)
-        {
-            printf("\n...Connect...!\n");
-            while (com_getc(1) >= 0);
-
-        usleep(10000);//wait 10ms
-            printf("\n...Send Command!\n");
-            sendcommand(COMMAND);
-//            com_putc(COMMAND);
-//            com_getc(1);
-
-            // Empty buffer
-            while(1)
-            {
-                switch(com_getc(TIMEOUT))
-                {
-                    case SUCCESS:
-                        printf("\n...Connected!\n");
-                        return;
-                    case -1:
-                        printf("\n...Connection timeout!\n\n");
-                        exit (0);
-                }
-            }
-        }
-        }
-        state++;
-        state = state % 4;
-    }
-#endif
 }//void connect_device()
 
 
@@ -946,7 +883,7 @@ int main(int argc, char *argv[])
             if ((bootInfo.crc_on != 2) && (check_crc() != 0))
                 printf("\n ---------- Programming failed (wrong CRC)! ----------\n\n");
             else
-                printf("\n ++++++++++ Programming successful! ++++++++++\n\n");
+                printf("\n ++++++++++ Device successfully programmed! ++++++++++\n\n");
         }
         else
             printf("\n ---------- Programming failed! ----------\n\n");
@@ -956,12 +893,12 @@ int main(int argc, char *argv[])
         if (verifyFlash (data, lastAddr, &bootInfo))
         {
             if ((bootInfo.crc_on != 2) && (check_crc() != 0))
-                printf("\n ---------- Verifying failed (wrong CRC)! ----------\n\n");
+                printf("\n ---------- Verification failed (wrong CRC)! ----------\n\n");
             else
-                printf("\n ++++++++++ Verifying successful! ++++++++++\n\n");
+                printf("\n ++++++++++ Device successfully verified! ++++++++++\n\n");
         }
         else
-            printf("\n ---------- Verifying failed! ----------\n\n");
+            printf("\n ---------- Verification failed! ----------\n\n");
     }
 
     printf("...starting application\n\n");

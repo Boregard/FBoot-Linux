@@ -97,6 +97,8 @@ char com_open(const char * device, speed_t baud)
  */
 void com_close() 
 {
+    tcdrain(fd);
+
     // restore old settings
     tcsetattr(fd, TCSANOW, &oldtio);
 
