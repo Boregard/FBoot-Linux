@@ -1,16 +1,17 @@
 TRG = bootloader
 
 SRC = $(TRG).c com.c
+HD  = com.h protocol.h
 OBJ = $(SRC:.c=.o)
 
-CCFLAGS = -Wall -g
+CCFLAGS = -Wall -g -O3
 
 all : $(TRG)
 
-%.o : %.c
+%.o : %.c $(HD)
 	gcc $(CCFLAGS) -c $< -o $@
 
-$(TRG) : $(OBJ)    
+$(TRG) : $(OBJ)
 	gcc $(CCFLAGS) $(OBJ) -o $@
 
 clean:

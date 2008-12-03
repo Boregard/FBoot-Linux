@@ -2,7 +2,7 @@
  * Bootloader um dem Mikrocontroller Bootloader von Peter Dannegger anzusteuern
  * Teile des Codes sind vom original Booloader von Peter Dannegger (danni@alice-dsl.net)
  *
- * @author Bernhard Michler, based on source of Andreas Butti
+ * @author Bernhard Michler, based on linux source of Andreas Butti
  */
 
 
@@ -226,7 +226,8 @@ char * readHexfile(const char * filename, int flashsize, unsigned long * lastadd
     data = malloc(flashsize);
     if (data == NULL)
     {
-        printf("Memory allocation error!\n");
+        printf("Memory allocation error, could not get %d bytes for flash-buffer!\n",
+               flashsize);
         return NULL;
     }
 
@@ -606,9 +607,7 @@ void connect_device ( char *password )
                             return;
                     }
                 }
-
             }
-
         } while (*s++);
     }
 }//void connect_device()
@@ -738,7 +737,7 @@ int read_info (bootInfo_t *bInfo)
     }
     if( i > MAXFLASH)
     {
-        printf("Device an flashsize do not match!\n");
+        printf("Device and flashsize do not match!\n");
         exit (0);
     }
     bInfo->flashsize = i;
@@ -792,13 +791,20 @@ int main(int argc, char *argv[])
     char    *data = NULL;
 
     // pointer to password...
-    char    *password = "BMIa";
+    char    *password = "Peda";
 
     // last address in hexfile
     unsigned long lastAddr = 0;
 
     // Serial device
     const char * device = "/dev/ttyS0";
+
+    // init bootinfo
+    memset (&bootInfo, 0, sizeof (bootInfo));
+
+    // set flashsize to 256k; should proalby later be corrected to
+    // the real size of the used controller...
+    bootInfo.flashsize = 256 * 1024;
 
     // default values
     int baud = 4800;
@@ -893,6 +899,12 @@ int main(int argc, char *argv[])
 
     // read file first
     data = readHexfile (hexfile, bootInfo.flashsize, &lastAddr);
+
+    if (data == NULL)
+    {
+        printf ("ERROR: no buffer allocated and filled, exiting!\n");
+        return (-1);
+    }
     printf("Size    : %ld Bytes\n", lastAddr);
 
     if (program & verify)
