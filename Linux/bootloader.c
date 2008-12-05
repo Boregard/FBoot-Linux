@@ -804,7 +804,7 @@ int main(int argc, char *argv[])
 
     // set flashsize to 256k; should proalby later be corrected to
     // the real size of the used controller...
-    bootInfo.flashsize = 256 * 1024;
+    bootInfo.flashsize = MAXFLASH;
 
     // default values
     int baud = 4800;
@@ -897,16 +897,6 @@ int main(int argc, char *argv[])
     printf("Baudrate: %i\n", baud);
     printf("File    : %s\n", hexfile);
 
-    // read file first
-    data = readHexfile (hexfile, bootInfo.flashsize, &lastAddr);
-
-    if (data == NULL)
-    {
-        printf ("ERROR: no buffer allocated and filled, exiting!\n");
-        return (-1);
-    }
-    printf("Size    : %ld Bytes\n", lastAddr);
-
     if (program & verify)
     {
         printf ("Program and verify device.\n");
@@ -930,6 +920,16 @@ int main(int argc, char *argv[])
     // now start with target...
     connect_device (password);
     read_info (&bootInfo);
+    // read the file after target-info, to verify the filesize against the flashsize
+    data = readHexfile (hexfile, bootInfo.flashsize, &lastAddr);
+
+    if (data == NULL)
+    {
+        printf ("ERROR: no buffer allocated and filled, exiting!\n");
+        return (-1);
+    }
+    printf("Size    : %ld Bytes\n", lastAddr);
+
 
     if (program)
     {

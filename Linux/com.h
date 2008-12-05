@@ -13,12 +13,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-// Baudrate definitions
-
-#define BAUD_CNT 18
-
-extern speed_t baud_const[BAUD_CNT];
-extern unsigned long baud_value[BAUD_CNT];
 extern unsigned int crc;
 
 /// Prototypes
