@@ -12,11 +12,72 @@
 #include <stdlib.h>
 #include <time.h>
 #include <errno.h>
+#include <signal.h>
 #include <sys/times.h>
 #include <sys/ioctl.h>
 
 #include "com.h"
 #include "protocol.h"
+
+
+/**************************************************************/
+/*                          CONSTANTS                         */
+/**************************************************************/
+#define AVR_PROGRAM     0x01
+#define AVR_VERIFY      0x02
+#define AVR_TERMINAL    0x04
+
+#define AUX     1
+#define CON     2
+#define TRUE    1
+#define FALSE   0
+
+#define ACK     0x06
+#define NACK    0x15
+#define ESC     0x1b
+#define CTRLC   0x03
+#define CTRLP   0x10
+#define CTRLF   0x06
+#define CTRLV   0x16
+
+// Definitions
+#define TIMEOUT   3   // 0.3s
+#define TIMEOUTP  40  // 4s
+
+
+#define ELAPSED_TIME(a) {                   \
+    struct tms    time;                     \
+    clock_t       stop;                     \
+    stop = times (&time);                   \
+    (a) = (double) (stop - start) / ticks;  \
+}
+
+/**************************************************************/
+/*                          GLOBALS                           */
+/**************************************************************/
+static struct termios   curr_term, old_term;
+static FILE             *fp_stdio = NULL; /* filepointer to normal terminal */
+static int              running = TRUE;
+static int              esc_seq = 0;
+
+static int              bsize = 16;
+
+    // pointer to password...
+    // must contain one of
+    // 0x0A - LF,  0x0B - VT,  0x0D - CR,  0x0F - SI
+    // 0x21 - '!', 0x43 - 'C', 0x61 - 'a', 0x85, 0x87
+    // 0xC3 - 'A~',0xE1 - 'a´' - ISO8859-1
+//    char    *password = "Peda";
+static char             *password = "BMIa";
+static char             *device = "/dev/ttyS0";
+static int              baud = 9600;
+
+/* variables for stopwatch */
+static clock_t  start  = 0;
+static double   ticks = 1;
+
+// Filename of the HEX File
+static const char * hexfile = NULL;
 
 
 typedef struct bootInfo
@@ -26,20 +87,16 @@ typedef struct bootInfo
     long    buffsize;
     long    flashsize;
     int     crc_on;
-    int     txBlockSize;
+    int     blocksize;
 } bootInfo_t;
 
 
-/// Definitions
-#define TIMEOUT   3  // 0.3s
-#define TIMEOUTP  40 // 4s
-
 typedef struct
 {
-    unsigned long   baudValue;
-    speed_t         baudConst;
+    unsigned long   value;
+    speed_t         constval;
 } baudInfo_t;
-baudInfo_t baudRates[] = { 
+baudInfo_t baudrates[] = { 
     {     50,     B50 },
     {     75,     B75 },
     {    110,    B110 },
@@ -66,7 +123,7 @@ typedef struct
     unsigned long   id;
     const char      *name;
 } avrdev_t;
-avrdev_t avrDevices[] = {
+avrdev_t avr_dev[] = {
     { 0x01e9007,    "ATtiny13" },
     { 0x01e910a,    "ATtiny2313" },
     { 0x01e9205,    "ATmega48" },
@@ -86,10 +143,54 @@ avrdev_t avrDevices[] = {
     { 0x01e9406,    "ATmega168" },
     { 0x01e9501,    "ATmega323" },
     { 0x01e9502,    "ATmega32" },
+    { 0x01e950f,    "ATmega328" },
     { 0x01e9609,    "ATmega644" },
     { 0x01e9802,    "ATmega2561" }
 };
     
+
+
+/*****************************************************************************
+ *
+ *      Signal handler - reset terminal
+ *
+ ****************************************************************************/
+void sig_handler(int signal)
+{
+    running = FALSE;
+    if (fp_stdio != NULL)
+    {
+        printf("\nSignal %d (%d) resetting terminal !\n", signal, getpid());
+        tcsetattr (fileno (fp_stdio), TCSAFLUSH, &old_term);
+    }
+}
+
+
+/*****************************************************************************
+ *
+ *      Set timeout on tty input to new value, returns old timeout
+ *
+ ****************************************************************************/
+static int set_tty_timeout (int    fd,
+                            int    timeout)
+{
+    struct termios      terminal;
+    int                 old_timeout;
+
+    /* get current settings */
+    tcgetattr (fd, &terminal);
+
+    /* get old timeout */
+    old_timeout = terminal.c_cc[VTIME];
+
+    /* set timeout in 10th of seconds */
+    terminal.c_cc[VTIME] = timeout;
+
+    /* set new status */
+    tcsetattr (fd, TCSANOW, &terminal);
+
+    return (old_timeout);
+}
 
 
 /**
@@ -141,7 +242,7 @@ int readhex (FILE           *fp,
              unsigned char  *data)
 {
     char hexline[524]; // intel hex: max 255 byte
-    char * hp = hexline;
+    char *hp = hexline;
     unsigned int byte;
     int i;
     unsigned int num;
@@ -214,33 +315,33 @@ int readhex (FILE           *fp,
 /**
  * Read a hexfile
  */
-char * readHexfile(const char * filename, int flashsize, unsigned long * lastaddr)
+char * read_hexfile(const char * filename, unsigned long * lastaddr)
 {
-    char * data;
-    FILE *fp;
-    int len;
-    int x;
+    char    *data;
+    FILE    *fp;
+    int     len;
+    int     x;
     unsigned char line[512];
     unsigned long addr = 0;
 
-    data = malloc(flashsize);
+    data = malloc(MAXFLASH);
     if (data == NULL)
     {
         printf("Memory allocation error, could not get %d bytes for flash-buffer!\n",
-               flashsize);
+               MAXFLASH);
         return NULL;
     }
 
-    memset (data, 0xff, flashsize);
+    memset (data, 0xff, MAXFLASH);
 
     if(NULL == (fp = fopen(filename, "r")))
     {
         printf("File \"%s\" open failed: %s!\n\n", filename, strerror(errno));
         free(data);
-        exit(0);
+        return NULL;
     }
 
-    printf("Reading : %s... ", filename);
+    printf("Reading       : %s... ", filename);
 
 
     // reading file to "data"
@@ -248,11 +349,11 @@ char * readHexfile(const char * filename, int flashsize, unsigned long * lastadd
     {
         if(len)
         {
-            if( addr + len > flashsize )
+            if( addr + len > MAXFLASH )
             {
                 fclose(fp);
                 free(data);
-                printf("\n  Hex-file to large for target!\n");
+                printf("\n  Hex-file too large for target!\n");
                 return NULL;
             }
             for(x = 0; x < len; x++)
@@ -282,7 +383,7 @@ char * readHexfile(const char * filename, int flashsize, unsigned long * lastadd
  *
  * @return value; -2 on error; exit on timeout
  */
-long readval()
+long readval(int fd)
 {
     int i;
     int j = 257;
@@ -290,11 +391,11 @@ long readval()
 
     while(1)
     {
-        i = com_getc(TIMEOUT);
+        i = com_getc(fd, TIMEOUT);
         if(i == -1)
         {
-            printf("...Device does not answer!\n");
-            exit(0);
+            printf("readval: ...Device does not answer!\n");
+            return -3;
         }
 
         switch(j)
@@ -331,40 +432,40 @@ long readval()
                 return -2;
         }
     }
-    return -2;
+    return -1;
 }
 
 /**
  * Print percentage line
  */
-void printPercentage (char          *text,
-                      unsigned long full_val,
-                      unsigned long cur_val)
+void print_perc_bar (char          *text,
+                     unsigned long full_val,
+                     unsigned long cur_val)
 {
     int         i;
     int         cur_perc;
     int         cur100p;
-    int         txtLen = 10;    // length of the add. text 2 * " | " "100%"
+    int         txtlen = 8;    // length of the add. text 2 * " [" "100%"
     unsigned short columns = 80;
-    struct winsize tWinsize;
+    struct winsize win_size;
 
     if (text)
-        txtLen += strlen (text);
+        txtlen += strlen (text);
 
-    if (ioctl (STDIN_FILENO, TIOCGWINSZ, &tWinsize) >= 0)
+    if (ioctl (STDIN_FILENO, TIOCGWINSZ, &win_size) >= 0)
     {
         // number of columns in terminal
-        columns = tWinsize.ws_col;
+        columns = win_size.ws_col;
     }
-    cur100p  = columns - txtLen;
+    cur100p  = columns - txtlen;
     cur_perc = (cur_val * cur100p) / full_val;
 
-    printf ("%s | ", text ? text : "");
+    printf ("%s [", text ? text : "");
 
     for (i = 0; i < cur_perc; i++) printf ("#");
     for (     ; i < cur100p;  i++) printf (" ");
 
-    printf (" | %3d%%\r", (int)((cur_val * 100) / full_val));
+    printf ("] %3d%%\r", (int)((cur_val * 100) / full_val));
 
     fflush(stdout);
 }
@@ -373,30 +474,31 @@ void printPercentage (char          *text,
 /**
  * Verify the controller
  */
-int verifyFlash (char        * data,
+int verifyflash (int           fd,
+                 char        * data,
                  unsigned long lastaddr,
                  bootInfo_t  * bInfo)
 {
-    struct tms  theTimes;
-    clock_t start_time;       //time
-    clock_t end_time;         //time
-    float   seconds;
+    struct tms  timestruct;
+    clock_t     start_time;       //time
+    clock_t     end_time;         //time
+    float       seconds;
 
     int    i;
     unsigned char d1;
     unsigned long addr;
 
-    start_time = times (&theTimes);
+    start_time = times (&timestruct);
 
     // Sending commands to MC
-    sendcommand(VERIFY);
+    sendcommand(fd, VERIFY);
 
-    if(com_getc(TIMEOUT) == BADCOMMAND)
+    if(com_getc(fd, TIMEOUT) == BADCOMMAND)
     {
         printf("Verify not available\n");
         return 0;
     }
-    printf( "Verify        : 00000 - %05lX\n", lastaddr);
+    printf( "Verify        : 0x00000 - 0x%05lX\n", lastaddr);
 
     // Sending data to MC
     addr = 0;
@@ -405,37 +507,37 @@ int verifyFlash (char        * data,
     while (i > 0)
     {
         if ((i % 16) == 0)
-            printPercentage ("Verifying", lastaddr, addr);
+            print_perc_bar ("Verifying", lastaddr, addr);
 
         d1 = data[addr];
 
         if ((d1 == ESCAPE) || (d1 == 0x13))
         {
-            com_putc(ESCAPE);
+            com_putc(fd, ESCAPE);
             d1 += ESC_SHIFT;
         }
-        if (i % bInfo->txBlockSize)
-            com_putc_fast (d1);
+        if (i % bInfo->blocksize)
+            com_putc_fast (fd, d1);
         else
-            com_putc (d1);
+            com_putc (fd, d1);
 
         i--;
         addr++;
     }
 
-    printPercentage ("Verifying", 100, 100);
+    print_perc_bar ("Verifying", 100, 100);
 
-    end_time = times (&theTimes);
+    end_time = times (&timestruct);
     seconds  = (float)(end_time-start_time)/sysconf(_SC_CLK_TCK);
 
-    printf("\nElapsed time: %3.2f seconds, %.0f Bytes/sec.\n",
+    printf("\nElapsed time  : %3.2f seconds, %.0f Bytes/sec.\n",
            seconds,
            (float)lastaddr / seconds);
 
-    com_putc(ESCAPE);
-    com_putc(ESC_SHIFT); // A5,80 = End
+    com_putc(fd, ESCAPE);
+    com_putc(fd, ESC_SHIFT); // A5,80 = End
 
-    if (com_getc(TIMEOUTP) == SUCCESS)
+    if (com_getc(fd, TIMEOUTP) == SUCCESS)
         return 1;
 
     return 0;
@@ -445,11 +547,12 @@ int verifyFlash (char        * data,
 /**
  * Flashes the controller
  */
-int programFlash (char        * data,
+int programflash (int           fd,
+                  char        * data,
                   unsigned long lastaddr,
                   bootInfo_t *  bInfo)
 {
-    struct tms  theTimes;
+    struct tms  timestruct;
     clock_t start_time;       //time
     clock_t end_time;         //time
     float   seconds;
@@ -458,11 +561,11 @@ int programFlash (char        * data,
     unsigned char d1;
     unsigned long addr;
 
-    start_time = times (&theTimes);
+    start_time = times (&timestruct);
 
     // Sending commands to MC
-    printf("Programming   : 00000 - %05lX\n", lastaddr);
-    sendcommand(PROGRAM);
+    printf("Programming   : 0x00000 - 0x%05lX\n", lastaddr);
+    sendcommand(fd, PROGRAM);
 
     // Sending data to MC
     addr = 0;
@@ -472,25 +575,25 @@ int programFlash (char        * data,
 
     while (i > 0)
     {
-        printPercentage ("Writing", lastaddr, addr);
+        print_perc_bar ("Writing", lastaddr, addr);
 
         // first write one buffer
         while (i > 0)
         {
             if ((i % 16) == 0)
-                printPercentage ("Writing", lastaddr, addr);
+                print_perc_bar ("Writing", lastaddr, addr);
 
             d1 = data[addr];
 
             if ((d1 == ESCAPE) || (d1 == 0x13))
             {
-                com_putc(ESCAPE);
+                com_putc(fd, ESCAPE);
                 d1 += ESC_SHIFT;
             }
-            if (i % bInfo->txBlockSize)
-                com_putc_fast (d1);
+            if (i % bInfo->blocksize)
+                com_putc_fast (fd, d1);
             else
-                com_putc (d1);
+                com_putc (fd, d1);
 
             i--;
             addr++;
@@ -504,7 +607,7 @@ int programFlash (char        * data,
         if (i > 0)
         {
             // now check if it is correctly burned
-            if (com_getc (TIMEOUTP) != CONTINUE)
+            if (com_getc (fd, TIMEOUTP) != CONTINUE)
             {
                 printf("\n ---------- Failed! ----------\n");
                 free(data);
@@ -513,19 +616,19 @@ int programFlash (char        * data,
         }
     }
 
-    printPercentage ("Writing", 100, 100);
+    print_perc_bar ("Writing", 100, 100);
 
-    end_time = times (&theTimes);
+    end_time = times (&timestruct);
     seconds  = (float)(end_time-start_time)/sysconf(_SC_CLK_TCK);
 
-    printf("\nElapsed time: %3.2f seconds, %.0f Bytes/sec.\n",
+    printf("\nElapsed time  : %3.2f seconds, %.0f Bytes/sec.\n",
            seconds,
            (float)lastaddr / seconds);
 
-    com_putc(ESCAPE);
-    com_putc(ESC_SHIFT); // A5,80 = End
+    com_putc(fd, ESCAPE);
+    com_putc(fd, ESC_SHIFT); // A5,80 = End
 
-    if (com_getc(TIMEOUTP) == SUCCESS)
+    if (com_getc(fd, TIMEOUTP) == SUCCESS)
         return 1;
 
     return 0;
@@ -539,12 +642,14 @@ int programFlash (char        * data,
 void usage()
 {
     printf("./booloader [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex\n");
-    printf("-d Device\n");
-    printf("-b Baudrate\n");
-    printf("-t TxD Blocksize\n");
-    printf("-v Verify\n");
-    printf("-p Programm\n");
-    printf("-P Password\n");
+    printf("-d    Device\n");
+    printf("-b    Baudrate\n");
+    printf("-t    TxD Blocksize\n");
+    printf("-v    Verify\n");
+    printf("-p    Program\n");
+    printf("-P    Password\n");
+    printf("-T    enter terminal mode\n");
+    printf("      without -w[1|2] - autodetect\n");
     printf("Author: Bernhard Michler (based on code from Andreas Butti)\n");
 
     exit(1);
@@ -553,63 +658,66 @@ void usage()
 /**
  * Try to connect a device
  */
-void connect_device ( char *password )
+int connect_device ( int fd,
+                     const char *password )
 {
     const char * ANIM_CHARS = "-\\|/";
 
-    int localecho = 0;
     int state = 0;
     int in = 0;
 
+    char passtring[32];
+
+    sprintf (passtring, "%s%c", password, 0xff);
+
     printf("Waiting for device...  ");
 
-    while (1)
+    while (running)
     {
+        const char *s = passtring; //password;
+
         usleep (25000);     // just to slow animation...
         printf("\b%c", ANIM_CHARS[state++ & 3]);
         fflush(stdout);
 
-        const char *s = password;
-
         do 
         {
             if (*s)
-                com_putc(*s);
+                com_putc(fd, *s);
             else
-                com_putc(0x0ff);
+                com_putc(fd, 0x0ff);
 
-            in = com_getc(0);
-            if (in == password[1])
-                localecho = 1;
+            in = com_getc(fd, 0);
 
             if (in == CONNECT)
             {
-                if (localecho)
-                {
-                    while (com_getc(TIMEOUT) != -1);
+                printf ("\bconnected");
 
-                    printf ("\bconnected (one wire)!\n");
-                    com_localecho();
-                }
-                else 
-                {
-                    printf ("\bconnected!\n");
-                }
+                // clear buffer from echo...
+                while (com_getc(fd, TIMEOUT) != -1);
 
-                sendcommand( COMMAND );
+                sendcommand( fd, COMMAND );
 
                 while (1)
                 {
-                    switch(com_getc(TIMEOUT))
+                    switch(com_getc(fd, TIMEOUT))
                     {
+                        case COMMAND:
+                            com_localecho();
+                            printf (" (one wire)");
+                            break;
                         case SUCCESS:
                         case -1:
-                            return;
+                            printf ("!\n");
+                            return 1;
                     }
                 }
             }
         } while (*s++);
     }
+    printf ("\nTerminated by user.\n");
+
+    return 0;
 }//void connect_device()
 
 
@@ -618,17 +726,17 @@ void connect_device ( char *password )
  *
  * @return 2 if no crc support, 0 if crc supported, 1 fail, exit on timeout
  */
-int check_crc()
+int check_crc(int fd)
 {
     int i;
     unsigned int crc1;
 
-    sendcommand(CHECK_CRC);
+    sendcommand(fd, CHECK_CRC);
     crc1 = crc;
-    com_putc(crc1);
-    com_putc(crc1 >> 8);
+    com_putc(fd, crc1);
+    com_putc(fd, crc1 >> 8);
 
-    i = com_getc(TIMEOUT);
+    i = com_getc(fd, TIMEOUT);
     switch (i)
     {
         case SUCCESS:
@@ -638,8 +746,8 @@ int check_crc()
         case FAIL:
             return 1;
         case -1:
-            printf("...Device does not answer!\n\n");
-            exit (0);
+            printf("check_crc: ...Device does not answer!\n\n");
+            // FALLTHROUGH
         default:
             return i;
     }
@@ -650,17 +758,21 @@ int check_crc()
  *
  * @return true on success; exit on error
  */
-int read_info (bootInfo_t *bInfo)
+int read_info (int fd, 
+               bootInfo_t *bInfo)
 {
     long i, j;
     char s[256];
     FILE *fp;
 
-    bInfo->crc_on = check_crc();
-    sendcommand(REVISION);
+    bInfo->crc_on = check_crc(fd);
+    if (bInfo->crc_on < 0)
+        return (0);
 
-    i = readval();
-    if(i == -2)
+    sendcommand(fd, REVISION);
+
+    i = readval(fd);
+    if(i < 0)
     {
         printf("Bootloader Version unknown (Fail)\n");
         bInfo->revision = -1;
@@ -671,13 +783,13 @@ int read_info (bootInfo_t *bInfo)
         bInfo->revision = i;
     }
 
-    sendcommand(SIGNATURE);
+    sendcommand(fd, SIGNATURE);
 
-    i = readval();
-    if (i == -2)
+    i = readval(fd);
+    if (i < 0)
     {
         printf("Reading device SIGNATURE failed!\n\n");
-        exit (0);
+        return (0);
     }
     bInfo->signature = i;
 
@@ -699,15 +811,15 @@ int read_info (bootInfo_t *bInfo)
     else
     {
         // search locally...
-        for (j = 0; j < (sizeof (avrDevices) / sizeof (avrdev_t)); j++)
+        for (j = 0; j < (sizeof (avr_dev) / sizeof (avrdev_t)); j++)
         {
-            if (i == avrDevices[j].id)
+            if (i == avr_dev[j].id)
             {
-                strcpy (s, avrDevices[j].name);
+                strcpy (s, avr_dev[j].name);
                 break;
             }
         }
-        if (j == (sizeof (avrDevices) / sizeof (avrdev_t)))
+        if (j == (sizeof (avr_dev) / sizeof (avrdev_t)))
         {
             sscanf ("(?)" , "%s", s);
             printf("File \"devices.txt\" not found!\n");
@@ -715,30 +827,30 @@ int read_info (bootInfo_t *bInfo)
     }
     printf("Target        : %06lX %s\n", i, s);
 
-    sendcommand(BUFFSIZE);
+    sendcommand(fd, BUFFSIZE);
 
-    i = readval();
-    if (i == -2)
+    i = readval(fd);
+    if (i < 0)
     {
         printf("Reading BUFFSIZE failed!\n\n");
-        exit (0);
+        return (0);
     }
     bInfo->buffsize = i;
 
     printf("Buffer        : %ld Byte\n", i );
 
-    sendcommand(USERFLASH);
+    sendcommand(fd, USERFLASH);
 
-    i = readval();
-    if (i == -2)
+    i = readval(fd);
+    if (i < 0)
     {
         printf("Reading FLASHSIZE failed!\n\n");
-        exit (0);
+        return (0);
     }
     if( i > MAXFLASH)
     {
         printf("Device and flashsize do not match!\n");
-        exit (0);
+        return (0);
     }
     bInfo->flashsize = i;
 
@@ -746,7 +858,7 @@ int read_info (bootInfo_t *bInfo)
 
     if(bInfo->crc_on != 2)
     {
-        bInfo->crc_on = check_crc();
+        bInfo->crc_on = check_crc(fd);
         switch(bInfo->crc_on)
         {
             case 2:
@@ -773,48 +885,379 @@ int read_info (bootInfo_t *bInfo)
 
 
 
+int prog_verify (int            fd,
+                 int            mode,
+                 int            baud,
+                 int            block_size,
+                 const char     *password,
+                 const char     *device,
+                 const char     *hexfile)
+{
+    char        *data = NULL;
+    bootInfo_t  bootinfo;
+
+    // last address in hexfile
+    unsigned long last_addr = 0;
+
+    // init bootinfo
+    memset (&bootinfo, 0, sizeof (bootinfo));
+
+    // set to maximun, is later in read_info corrected to the
+    // size available in the controller...
+    bootinfo.flashsize = MAXFLASH;
+    bootinfo.blocksize = 16;
+    bootinfo.blocksize = block_size;
+
+    switch (mode & (AVR_PROGRAM | AVR_VERIFY))
+    {
+        case AVR_PROGRAM | AVR_VERIFY:
+            printf ("Program and verify device.\n");
+            break;
+
+        case AVR_PROGRAM:
+            printf ("Program device.\n");
+            break;
+        case AVR_VERIFY:
+            printf ("Verify device.\n");
+            break;
+    }
+
+    printf("Port          : %s\n", device);
+    printf("Baudrate      : %d\n", baud);
+    printf("File          : %s\n", hexfile);
+
+    // read the file
+    data = read_hexfile (hexfile, &last_addr);
+
+    if (data == NULL)
+        return -4;
+
+    printf("Size          : %ld Bytes\n", last_addr + 1);
+
+    printf("-------------------------------------------------\n");
+
+    // now start with target...
+    if (connect_device (fd, password))
+    {
+        if (!read_info (fd, &bootinfo))
+        {
+            return (-3);
+        }
+
+        // now check if program fits into flash
+        if (last_addr >= bootinfo.flashsize)
+        {
+            printf ("ERROR: Hex-file too large for target!\n"
+                    "       (needs flash-size of %ld bytes, we have %ld bytes)\n",
+                    last_addr + 1, bootinfo.flashsize);
+            return (-2);
+        }
+
+        if (data == NULL)
+        {
+            printf ("ERROR: no buffer allocated and filled, exiting!\n");
+            return (-1);
+        }
+
+        if (mode & AVR_PROGRAM)
+        {
+            if (programflash (fd, data, last_addr, &bootinfo))
+            {
+                if ((bootinfo.crc_on != 2) && (check_crc(fd) != 0))
+                    printf("\n ---------- Programming failed (wrong CRC)! ----------\n\n");
+                else
+                    printf("\n ++++++++++ Device successfully programmed! ++++++++++\n\n");
+            }
+            else
+                printf("\n ---------- Programming failed! ----------\n\n");
+        }
+        if (mode & AVR_VERIFY)
+        {
+            if (verifyflash (fd, data, last_addr, &bootinfo))
+            {
+                if ((bootinfo.crc_on != 2) && (check_crc(fd) != 0))
+                    printf("\n ---------- Verification failed (wrong CRC)! ----------\n\n");
+                else
+                    printf("\n ++++++++++ Device successfully verified! ++++++++++\n\n");
+            }
+            else
+                printf("\n ---------- Verification failed! ----------\n\n");
+        }
+
+        printf("...starting application\n\n");
+        sendcommand(fd, START);         //start application
+        sendcommand(fd, START);
+    }
+    return 0;
+}
+
+
+/*****************************************************************************
+ *
+ *      Handle keyboard input
+ *
+ ****************************************************************************/
+static int handle_keyboard (FILE  *input,
+                            int   output)
+{
+    static char fname[1024+1] = "";
+    int         char_in = EOF;
+    int         desc_in = fileno (input);
+
+    if (desc_in < 0)
+    {
+        fprintf (stderr, "Error: Invalid stream for input (keyboard?) (errno %d: %s)!\n",
+                 errno, strerror (errno));
+        return (FALSE);
+    }
+
+    if ((fname[0] == '\0') &&
+        (hexfile  != NULL))
+        strcpy (fname, hexfile);
+
+
+    while (EOF != (char_in = getc (input)))
+    {
+        switch (char_in)
+        {
+            case '\r':
+                /* ignore... */
+                break;
+
+            case '\n':
+                com_putc (output, '\r');
+                break;
+
+            case CTRLF:
+                tcsetattr (desc_in, TCSAFLUSH, &old_term);
+                printf ("\nEnter Filename: ");
+                scanf ("%s", fname);
+                printf ("\nstart DOWNLOAD with CTRL D...\n");
+                tcsetattr (desc_in, TCSAFLUSH, &curr_term);
+                break;
+
+            case CTRLP:
+                tcsetattr (desc_in, TCSAFLUSH, &old_term);
+                printf("\n== PROGRAM:  Reset Target Device ==============\n");
+                prog_verify (output, AVR_PROGRAM, 
+                             baud, bsize, password, device, fname);
+                tcsetattr (desc_in, TCSAFLUSH, &curr_term);
+                break;
+
+            case CTRLV:
+                tcsetattr (desc_in, TCSAFLUSH, &old_term);
+                printf("\n== VERIFY:   Reset Target Device ==============\n");
+                prog_verify (output, AVR_VERIFY, 
+                             baud, bsize, password, device, fname);
+                tcsetattr (desc_in, TCSAFLUSH, &curr_term);
+                break;
+
+            case EOF:
+                break;
+
+            case CTRLC:
+                return (FALSE);
+                break;
+
+            default:
+                com_putc (output, (char) char_in);
+                break;
+        }
+    }
+
+    return (TRUE);
+}
+
+
+/*****************************************************************************
+ *
+ *      Handle V24 input
+ *
+ ****************************************************************************/
+static void handle_input (int          input,
+                          FILE         *output)
+{
+    static char         readbuf[1024+1];
+    int                 i;
+    int                 bytes_read;
+
+    /* handle V24 input here */
+    do
+    {
+        bytes_read = com_read (input, readbuf, sizeof (readbuf) - 1);
+
+        /* replace possible CR/LF with LF only */
+        for (i = 0; i < bytes_read; i++)
+        {
+            if (esc_seq)
+            {
+                esc_seq = 0;
+            }
+            else
+            {
+                switch (readbuf[i])
+                {
+                    case '\r':
+                        break;
+                    case 27:    /* Escape, ignore next as well */
+                        esc_seq++;
+                        break;
+                    default:
+                        putc (readbuf[i], output);
+                }
+            }
+        }
+    } while (bytes_read > 0);
+    fflush (output);
+}
+
+/*****************************************************************************
+ *
+ *      Program loop
+ *
+ ****************************************************************************/
+static void do_v24 (int iFd)
+{
+    int                 old_timeout;
+    int                 stdio;
+    int                 ok;
+    int                 max_select;
+    struct timeval      timeout;
+    fd_set              fdset;
+    int                 ret_val;
+
+    /* "open" terminal -> get filedescriptor to it */
+    fp_stdio = fopen (ctermid (NULL), "r+");
+    if (fp_stdio == NULL) {
+        fprintf (stderr, "\nCan not open terminal (errno: %s) !\n", strerror (errno));
+        return;
+    }
+
+    stdio = fileno (fp_stdio);
+    if (stdio < 0)
+    {
+        fprintf (stderr, "Error: Invalid stream for terminal (errno %d: %s)!\n",
+                 errno, strerror (errno));
+        return;
+    }
+
+    printf("\n");
+    printf("=================================================\n");
+    printf("|           BOOTLOADER, Terminal mode           |\n");
+    printf("| CTRL C: exit program                          |\n");
+    printf("| CTRL F: enter filename                        |\n");
+    printf("| CTRL P: program file                          |\n");
+    printf("| CTRL V: verify file                           |\n");
+    printf("=================================================\n");
+
+    tcgetattr (fileno (fp_stdio), &old_term);
+
+    curr_term = old_term;
+    curr_term.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL | ICANON);
+
+    /* Set maximum wait time on input */
+    curr_term.c_cc[VTIME] = 0;
+
+    /* Set minimum bytes to read */
+    curr_term.c_cc[VMIN]  = 0;
+
+    tcsetattr (fileno (fp_stdio), TCSAFLUSH, &curr_term);
+
+    /* set new timeout on V24, we want responsive system */
+    old_timeout = set_tty_timeout (iFd, 0);   /* no wait */
+
+    ok = TRUE;
+
+    do
+    {
+        FD_ZERO (&fdset);
+        FD_SET (iFd, &fdset);
+        FD_SET (stdio, &fdset);
+        max_select = (iFd > stdio) ? iFd : stdio;
+
+        /* -- set max. waittime -- */
+        timeout.tv_sec  = 1;
+        timeout.tv_usec = 500000;
+
+        errno = 0;
+
+        ret_val = select (max_select + 1, &fdset, NULL, NULL, &timeout);
+
+        if (ret_val > 0)
+        {
+            /* -- we got something on stdin ?? -- */
+            if (FD_ISSET (stdio, &fdset))
+            {
+                /* stdin: someone hacked the keyboard */
+                ok = handle_keyboard (fp_stdio, iFd);
+            }
+
+            /* -- we got something from serial line -- */
+            if (FD_ISSET (iFd, &fdset))
+            {
+                /* handle V24 input here */
+                handle_input (iFd, fp_stdio);
+            }
+        }
+        else if (ret_val < 0)
+        {
+            /*
+            ** Check if SIGINT was received. This is handled further down,
+            ** so we ignore the error from select in that case.
+            */
+            if (errno != EINTR)
+            {
+                fprintf (stderr, "Error reading from select: (%d) %s\n",
+                         errno, strerror (errno));
+                break;
+            }
+        }
+        else
+        {
+            /* just timeout */
+            esc_seq = 0;
+        }
+    } while (ok && running);
+
+    /* reset old timeout */
+    set_tty_timeout (iFd, old_timeout);
+
+    tcsetattr (stdio, TCSAFLUSH, &old_term);
+    fclose (fp_stdio);
+}
+
+
 /**
  * Main, startup
  */
 int main(int argc, char *argv[])
 {
-    // info buffer
-    bootInfo_t bootInfo;
-
-    // Filename of the HEX File
-    const char * hexfile = NULL;
-
-    char    verify  = 0;
-    char    program = 0;
-
-    // pointer to the loaded and converted HEX-file
-    char    *data = NULL;
-
-    // pointer to password...
-    char    *password = "Peda";
-
-    // last address in hexfile
-    unsigned long lastAddr = 0;
-
-    // Serial device
-    const char * device = "/dev/ttyS0";
-
-    // init bootinfo
-    memset (&bootInfo, 0, sizeof (bootInfo));
-
-    // set flashsize to 256k; should proalby later be corrected to
-    // the real size of the used controller...
-    bootInfo.flashsize = MAXFLASH;
+    int     fd = 0;
+    int     mode = 0;
 
     // default values
-    int baud = 4800;
     int baudid = -1;
-    bootInfo.txBlockSize = 16;
+
+    struct tms timestruct;
+    struct sigaction sa;
+
+    sa.sa_handler = sig_handler;
+    sa.sa_flags = SA_NOMASK;
+
+    sigaction (SIGHUP, &sa, NULL);
+    sigaction (SIGINT, &sa, NULL);
+    sigaction (SIGQUIT, &sa, NULL);
+    sigaction (SIGTERM, &sa, NULL);
+
+    /* set start time for stopwatch */
+    start  = times (&timestruct);
+    ticks = (double) sysconf (_SC_CLK_TCK);
 
     // print header
     printf("\n");
     printf("=================================================\n");
     printf("|           BOOTLOADER, Target: V2.1            |\n");
+    printf("|            (" __DATE__ " " __TIME__ ")             |\n");
     printf("=================================================\n");
 
     // Parsing / checking parameter
@@ -836,17 +1279,21 @@ int main(int argc, char *argv[])
         }
         else if (strcmp (argv[i], "-v") == 0)
         {
-            verify = 1;
+            mode |= AVR_VERIFY;
         }
         else if (strcmp (argv[i], "-p") == 0)
         {
-            program = 1;
+            mode |= AVR_PROGRAM;
+        }
+        else if (strcmp (argv[i], "-T") == 0)
+        {
+            mode |= AVR_TERMINAL;
         }
         else if (strcmp (argv[i], "-t") == 0)
         {
             i++;
             if (i < argc)
-                bootInfo.txBlockSize = atoi(argv[i]);
+                bsize = atoi(argv[i]);
         }
         else if (strcmp (argv[i], "-P") == 0)
         {
@@ -860,22 +1307,22 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (hexfile == NULL)
+    if ((hexfile == NULL) && (mode & (AVR_PROGRAM | AVR_VERIFY)))
     {
         printf("No hexfile specified!\n");
         usage();
     }
 
-    if ((verify == 0) && (program == 0))
+    if (mode == 0)
     {
-        printf("No Verify / Programm specified!\n");
+        printf("No Verify / Program specified!\n");
         usage();
     }
 
     // Checking baudrate
-    for(i = 0; i < (sizeof (baudRates) / sizeof (baudInfo_t)); i++)
+    for(i = 0; i < (sizeof (baudrates) / sizeof (baudInfo_t)); i++)
     {
-        if (baudRates[i].baudValue == baud)
+        if (baudrates[i].value == baud)
         {
             baudid = i;
             break;
@@ -885,82 +1332,30 @@ int main(int argc, char *argv[])
     if(baudid == -1)
     {
         printf("Unknown baudrate (%i)!\nUse one of:", baud);
-        for(i = 0; i < (sizeof (baudRates) / sizeof (baudInfo_t)); i++)
+        for(i = 0; i < (sizeof (baudrates) / sizeof (baudInfo_t)); i++)
         {
-            printf (" %ld", baudRates[i].baudValue);
+            printf (" %ld", baudrates[i].value);
         }
         printf ("\n");
         usage();
     }
 
-    printf("Port    : %s\n", device);
-    printf("Baudrate: %i\n", baud);
-    printf("File    : %s\n", hexfile);
+    fd = com_open(device, baudrates[baudid].constval); 
 
-    if (program & verify)
-    {
-        printf ("Program and verify device.\n");
-    }
-    else
-    {
-        if (program)
-            printf ("Program device.\n");
-        if (verify)
-            printf ("Verify device.\n");
-    }
-    printf("-------------------------------------------------\n");
-
-    if(!com_open(device, baudRates[baudid].baudConst))
+    if (fd < 0)
     {
         printf("Opening com port \"%s\" failed (%s)!\n", 
                device, strerror (errno));
         exit(2);
     }
 
-    // now start with target...
-    connect_device (password);
-    read_info (&bootInfo);
-    // read the file after target-info, to verify the filesize against the flashsize
-    data = readHexfile (hexfile, bootInfo.flashsize, &lastAddr);
+    if (mode & (AVR_PROGRAM | AVR_VERIFY))
+        prog_verify (fd, mode, baud, bsize, password, device, hexfile);
 
-    if (data == NULL)
-    {
-        printf ("ERROR: no buffer allocated and filled, exiting!\n");
-        return (-1);
-    }
-    printf("Size    : %ld Bytes\n", lastAddr);
+    if (mode & AVR_TERMINAL)
+        do_v24 (fd);
 
-
-    if (program)
-    {
-        if (programFlash (data, lastAddr, &bootInfo))
-        {
-            if ((bootInfo.crc_on != 2) && (check_crc() != 0))
-                printf("\n ---------- Programming failed (wrong CRC)! ----------\n\n");
-            else
-                printf("\n ++++++++++ Device successfully programmed! ++++++++++\n\n");
-        }
-        else
-            printf("\n ---------- Programming failed! ----------\n\n");
-    }
-    if (verify)
-    {
-        if (verifyFlash (data, lastAddr, &bootInfo))
-        {
-            if ((bootInfo.crc_on != 2) && (check_crc() != 0))
-                printf("\n ---------- Verification failed (wrong CRC)! ----------\n\n");
-            else
-                printf("\n ++++++++++ Device successfully verified! ++++++++++\n\n");
-        }
-        else
-            printf("\n ---------- Verification failed! ----------\n\n");
-    }
-
-    printf("...starting application\n\n");
-    sendcommand(START);         //start application
-    sendcommand(START);
-
-    com_close();                //close open com port
+    com_close(fd);                //close open com port
     return 0;
 }
 

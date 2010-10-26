@@ -23,7 +23,7 @@
 #define  CHECK_CRC   6           // CRC o.k.
 #define  VERIFY      7           // Verify
 
-#define  MAXFLASH 0x40000UL      // max flash size (256kB)
+#define  MAXFLASH 0x40000        // max flash size (256kB)
 
 //-------------------------------------------------------------------------
 //          APICALL definitions

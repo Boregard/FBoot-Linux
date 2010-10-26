@@ -26,30 +26,36 @@ void com_localecho ();
 /**
  * Opens com port
  *
- * @return true if successfull
+ * @return descriptor
  */
-char com_open(const char * device, speed_t baud);
+int com_open(const char * device, speed_t baud);
 
 /**
  * Close com port and restore settings
  */
-void com_close();
+void com_close(int fd);
 
 /**
  * Sends one char
  */
-void com_putc_fast(unsigned char c);
-void com_putc(unsigned char c);
+void com_putc_fast(int fd, unsigned char c);
+void com_putc(int fd, unsigned char c);
 
 /**
- * Recives one char or -1 if timeout
+ * Receives one char or -1 if timeout
  */
-int com_getc(int timeout);
+int com_getc(int fd, int timeout);
 
+/**
+ * Read input string
+ */
+int com_read (int       fd,
+              char      *pszIn,
+              size_t    tLen);
 
 /**
  * Sending a command
  */
-void sendcommand(unsigned char c);
+void sendcommand(int fd, unsigned char c);
 
 #endif //COM_H_INCLUDED

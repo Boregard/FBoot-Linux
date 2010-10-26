@@ -19,8 +19,6 @@
 
 /// Attributes
 
-// Device
-int fd;
 // Old settings
 struct termios oldtio;
 // CRC checksum
@@ -47,15 +45,16 @@ void com_localecho ()
  *
  * @return true if successfull
  */
-char com_open(const char * device, speed_t baud)
+int com_open (const char * device, speed_t baud)
 {
     struct termios newtio;
+    int fd;
 
     // Open the device
     fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY);
     if (fd < 0)
     {
-        return 0;
+        return fd;
     }
 
     // Save old settings
@@ -88,14 +87,14 @@ char com_open(const char * device, speed_t baud)
 
     sendCount = 0;
 
-    return 1;
+    return fd;
 }
 
 
 /**
  * Close com port and restore settings
  */
-void com_close() 
+void com_close(int fd)
 {
     tcdrain(fd);
 
@@ -110,7 +109,8 @@ void com_close()
  * Receives one char or -1 if timeout
  * timeout in 10th of seconds
  */
-int com_getc(int timeout) 
+int com_getc(int fd,
+             int timeout) 
 {
     static long         ticks = 0;
     static struct tms   theTimes;
@@ -137,16 +137,32 @@ int com_getc(int timeout)
     return -1;
 }
 
+/*****************************************************************************
+ *
+ *      Read from serial port
+ *
+ ****************************************************************************/
+int com_read (int       fd,
+              char      *pszIn,
+              size_t    tLen)
+{
+    int                 iNrRead;
+
+    iNrRead = read (fd, pszIn, tLen);
+
+    return (iNrRead);
+}
 
 /**
  * Sends one char
  */
-void com_putc_fast(unsigned char c)
+void com_putc_fast(int           fd,
+                   unsigned char c)
 {
     if (sendCount)
     {
         if (sendCount > 1)
-            com_getc(0);
+            com_getc(fd, 0);
         sendCount++;
     }
 
@@ -154,22 +170,22 @@ void com_putc_fast(unsigned char c)
     calc_crc( c ); // calculate transmit CRC
 }
 
-void com_putc(unsigned char c) 
+void com_putc(int fd, unsigned char c) 
 {
     tcdrain(fd);
-    com_putc_fast (c);
+    com_putc_fast (fd, c);
 }
 
 
 /**
  * Sending a command
  */
-void sendcommand(unsigned char c)
+void sendcommand(int fd, unsigned char c)
 {
     if (sendCount)
         sendCount = 1;
-    com_putc(COMMAND);
-    com_putc(c);
+    com_putc(fd, COMMAND);
+    com_putc(fd, c);
     tcdrain(fd);
 }
 
