@@ -321,7 +321,7 @@ char * read_hexfile(const char * filename, unsigned long * lastaddr)
     FILE    *fp;
     int     len;
     int     x;
-    unsigned char line[512];
+    unsigned char line[256];
     unsigned long addr = 0;
 
     data = malloc(MAXFLASH);
@@ -332,6 +332,7 @@ char * read_hexfile(const char * filename, unsigned long * lastaddr)
         return NULL;
     }
 
+    *lastaddr = 0;
     memset (data, 0xff, MAXFLASH);
 
     if(NULL == (fp = fopen(filename, "r")))
@@ -363,7 +364,7 @@ char * read_hexfile(const char * filename, unsigned long * lastaddr)
 
             addr += len;
 
-            if(*lastaddr < addr-1)
+            if(*lastaddr < (addr-1))
             {
                 *lastaddr = addr-1;
             }
@@ -484,7 +485,6 @@ int verifyflash (int           fd,
     clock_t     end_time;         //time
     float       seconds;
 
-    int    i;
     unsigned char d1;
     unsigned long addr;
 
@@ -501,12 +501,10 @@ int verifyflash (int           fd,
     printf( "Verify        : 0x00000 - 0x%05lX\n", lastaddr);
 
     // Sending data to MC
-    addr = 0;
-    i = lastaddr - addr;
-
-    while (i > 0)
+    print_perc_bar ("Verifying", lastaddr, 0);
+    for (addr = 0; ;addr++)
     {
-        if ((i % 16) == 0)
+        if ((addr % 16) == 0)
             print_perc_bar ("Verifying", lastaddr, addr);
 
         d1 = data[addr];
@@ -516,13 +514,13 @@ int verifyflash (int           fd,
             com_putc(fd, ESCAPE);
             d1 += ESC_SHIFT;
         }
-        if (i % bInfo->blocksize)
+        if (addr % bInfo->blocksize)
             com_putc_fast (fd, d1);
         else
             com_putc (fd, d1);
 
-        i--;
-        addr++;
+        if (addr == lastaddr)
+            break;
     }
 
     print_perc_bar ("Verifying", 100, 100);
@@ -568,52 +566,42 @@ int programflash (int           fd,
     sendcommand(fd, PROGRAM);
 
     // Sending data to MC
-    addr = 0;
-    i = lastaddr - addr;
-    if (i > bInfo->buffsize)
-        i = bInfo->buffsize;
+    i = bInfo->buffsize;
 
-    while (i > 0)
+    print_perc_bar ("Writing", lastaddr, 0);
+
+    for (addr = 0; ;addr++)
     {
-        print_perc_bar ("Writing", lastaddr, addr);
+        if ((i % 16) == 0)
+            print_perc_bar ("Writing", lastaddr, addr);
 
-        // first write one buffer
-        while (i > 0)
+        d1 = data[addr];
+
+        if ((d1 == ESCAPE) || (d1 == 0x13))
         {
-            if ((i % 16) == 0)
-                print_perc_bar ("Writing", lastaddr, addr);
-
-            d1 = data[addr];
-
-            if ((d1 == ESCAPE) || (d1 == 0x13))
-            {
-                com_putc(fd, ESCAPE);
-                d1 += ESC_SHIFT;
-            }
-            if (i % bInfo->blocksize)
-                com_putc_fast (fd, d1);
-            else
-                com_putc (fd, d1);
-
-            i--;
-            addr++;
+            com_putc(fd, ESCAPE);
+            d1 += ESC_SHIFT;
         }
+        if (i % bInfo->blocksize)
+            com_putc_fast (fd, d1);
+        else
+            com_putc (fd, d1);
 
-        // set nr of bytes with next block
-        i = lastaddr - addr;
-        if (i > bInfo->buffsize)
-            i = bInfo->buffsize;
-
-        if (i > 0)
+        if (--i == 0)
         {
-            // now check if it is correctly burned
             if (com_getc (fd, TIMEOUTP) != CONTINUE)
             {
                 printf("\n ---------- Failed! ----------\n");
                 free(data);
                 return 0;
             }
+
+            // set nr of bytes with next block
+            i = bInfo->buffsize;
         }
+
+        if (addr == lastaddr)
+            break;
     }
 
     print_perc_bar ("Writing", 100, 100);
@@ -969,7 +957,10 @@ int prog_verify (int            fd,
                     printf("\n ++++++++++ Device successfully programmed! ++++++++++\n\n");
             }
             else
+            {
                 printf("\n ---------- Programming failed! ----------\n\n");
+                return (-5);
+            }
         }
         if (mode & AVR_VERIFY)
         {
