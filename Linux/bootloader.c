@@ -158,11 +158,13 @@ avrdev_t avr_dev[] = {
 void sig_handler(int signal)
 {
     running = FALSE;
+#if 0
     if (fp_stdio != NULL)
     {
         printf("\nSignal %d (%d) resetting terminal !\n", signal, getpid());
         tcsetattr (fileno (fp_stdio), TCSAFLUSH, &old_term);
     }
+#endif
 }
 
 
@@ -486,7 +488,7 @@ int verifyflash (int           fd,
     float       seconds;
 
     unsigned char d1;
-    unsigned long addr;
+    unsigned long addr = 0;
 
     start_time = times (&timestruct);
 
@@ -501,8 +503,7 @@ int verifyflash (int           fd,
     printf( "Verify        : 0x00000 - 0x%05lX\n", lastaddr);
 
     // Sending data to MC
-    print_perc_bar ("Verifying", lastaddr, 0);
-    for (addr = 0; ;addr++)
+    do
     {
         if ((addr % 16) == 0)
             print_perc_bar ("Verifying", lastaddr, addr);
@@ -519,9 +520,8 @@ int verifyflash (int           fd,
         else
             com_putc (fd, d1);
 
-        if (addr == lastaddr)
-            break;
-    }
+    } while (addr++ < lastaddr);
+
 
     print_perc_bar ("Verifying", 100, 100);
 
@@ -557,7 +557,7 @@ int programflash (int           fd,
 
     int    i;
     unsigned char d1;
-    unsigned long addr;
+    unsigned long addr = 0;
 
     start_time = times (&timestruct);
 
@@ -568,11 +568,9 @@ int programflash (int           fd,
     // Sending data to MC
     i = bInfo->buffsize;
 
-    print_perc_bar ("Writing", lastaddr, 0);
-
-    for (addr = 0; ;addr++)
+    do
     {
-        if ((i % 16) == 0)
+        if ((addr % 16) == 0)
             print_perc_bar ("Writing", lastaddr, addr);
 
         d1 = data[addr];
@@ -599,10 +597,7 @@ int programflash (int           fd,
             // set nr of bytes with next block
             i = bInfo->buffsize;
         }
-
-        if (addr == lastaddr)
-            break;
-    }
+    } while (addr++ < lastaddr);
 
     print_perc_bar ("Writing", 100, 100);
 

@@ -10,6 +10,7 @@
 /// Includes
 #include <stdio.h>
 #include <time.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/times.h>
 
@@ -90,13 +91,20 @@ int com_open (const char * device, speed_t baud)
     return fd;
 }
 
+/**
+ * Make sure all is written out....
+ */
+void com_drain (int fd)
+{
+    while ((tcdrain(fd) < 0) && (errno == EINTR));
+}
 
 /**
  * Close com port and restore settings
  */
 void com_close(int fd)
 {
-    tcdrain(fd);
+    com_drain(fd);
 
     // restore old settings
     tcsetattr(fd, TCSANOW, &oldtio);
@@ -122,7 +130,7 @@ int com_getc(int fd,
 
     do 
     {
-        if (read(fd, &c, 1))
+        if (read(fd, &c, 1) == 1)
         {
             if (sendCount > 1)
             {
@@ -146,9 +154,11 @@ int com_read (int       fd,
               char      *pszIn,
               size_t    tLen)
 {
-    int                 iNrRead;
+    int iNrRead;
 
-    iNrRead = read (fd, pszIn, tLen);
+    do {
+        iNrRead = read (fd, pszIn, tLen);
+    } while ((iNrRead < 0) && (errno == EINTR));
 
     return (iNrRead);
 }
@@ -166,13 +176,14 @@ void com_putc_fast(int           fd,
         sendCount++;
     }
 
-    write(fd, &c, 1);
+    while ((write(fd, &c, 1) < 0) && (errno == EINTR));
+
     calc_crc( c ); // calculate transmit CRC
 }
 
 void com_putc(int fd, unsigned char c) 
 {
-    tcdrain(fd);
+    com_drain(fd);
     com_putc_fast (fd, c);
 }
 
@@ -186,7 +197,7 @@ void sendcommand(int fd, unsigned char c)
         sendCount = 1;
     com_putc(fd, COMMAND);
     com_putc(fd, c);
-    tcdrain(fd);
+    com_drain(fd);
 }
 
 
