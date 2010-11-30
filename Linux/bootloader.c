@@ -26,6 +26,7 @@
 #define AVR_PROGRAM     0x01
 #define AVR_VERIFY      0x02
 #define AVR_TERMINAL    0x04
+#define AVR_CLEAN       0x08
 
 #define AUX     1
 #define CON     2
@@ -37,6 +38,7 @@
 #define ESC     0x1b
 #define CTRLC   0x03
 #define CTRLP   0x10
+#define CTRLE   0x05
 #define CTRLF   0x06
 #define CTRLV   0x16
 
@@ -67,7 +69,6 @@ static int              bsize = 16;
     // 0x0A - LF,  0x0B - VT,  0x0D - CR,  0x0F - SI
     // 0x21 - '!', 0x43 - 'C', 0x61 - 'a', 0x85, 0x87
     // 0xC3 - 'A~',0xE1 - 'a´' - ISO8859-1
-//    char    *password = "Peda";
 static char             *password = "BMIa";
 static char             *device = "/dev/ttyS0";
 static int              baud = 9600;
@@ -630,9 +631,9 @@ void usage()
     printf("-t    TxD Blocksize\n");
     printf("-v    Verify\n");
     printf("-p    Program\n");
+    printf("-e    Erase\n");
     printf("-P    Password\n");
     printf("-T    enter terminal mode\n");
-    printf("      without -w[1|2] - autodetect\n");
     printf("Author: Bernhard Michler (based on code from Andreas Butti)\n");
 
     exit(1);
@@ -891,31 +892,45 @@ int prog_verify (int            fd,
     bootinfo.blocksize = 16;
     bootinfo.blocksize = block_size;
 
-    switch (mode & (AVR_PROGRAM | AVR_VERIFY))
-    {
-        case AVR_PROGRAM | AVR_VERIFY:
-            printf ("Program and verify device.\n");
-            break;
-
-        case AVR_PROGRAM:
-            printf ("Program device.\n");
-            break;
-        case AVR_VERIFY:
-            printf ("Verify device.\n");
-            break;
-    }
+    printf ("Now: ");
+    if (mode & AVR_CLEAN)
+        printf ("erase, ");
+    if (mode & AVR_PROGRAM)
+        printf ("program, ");
+    if (mode & AVR_VERIFY)
+        printf ("verify, ");
+    printf ("\b\b device.\n");
 
     printf("Port          : %s\n", device);
     printf("Baudrate      : %d\n", baud);
-    printf("File          : %s\n", hexfile);
 
-    // read the file
-    data = read_hexfile (hexfile, &last_addr);
+    if (mode & AVR_CLEAN)
+    {
+        data = malloc(MAXFLASH);
+
+        if (data == NULL)
+            printf("Memory allocation error, could not get %d bytes for flash-buffer!\n",
+                   MAXFLASH);
+        else
+            memset (data, 0xff, MAXFLASH);
+
+        last_addr = MAXFLASH - 1;
+    }
+    else
+    {
+        printf("File          : %s\n", hexfile);
+
+        // read the file
+        data = read_hexfile (hexfile, &last_addr);
+
+        printf("Size          : %ld Bytes\n", last_addr + 1);
+    }
 
     if (data == NULL)
-        return -4;
-
-    printf("Size          : %ld Bytes\n", last_addr + 1);
+    {
+        printf ("ERROR: no buffer allocated and filled, exiting!\n");
+        return (-1);
+    }
 
     printf("-------------------------------------------------\n");
 
@@ -927,6 +942,11 @@ int prog_verify (int            fd,
             return (-3);
         }
 
+        if (mode & AVR_CLEAN)
+        {
+            last_addr = bootinfo.flashsize - 1;
+        }
+        else
         // now check if program fits into flash
         if (last_addr >= bootinfo.flashsize)
         {
@@ -936,18 +956,14 @@ int prog_verify (int            fd,
             return (-2);
         }
 
-        if (data == NULL)
-        {
-            printf ("ERROR: no buffer allocated and filled, exiting!\n");
-            return (-1);
-        }
-
         if (mode & AVR_PROGRAM)
         {
             if (programflash (fd, data, last_addr, &bootinfo))
             {
                 if ((bootinfo.crc_on != 2) && (check_crc(fd) != 0))
                     printf("\n ---------- Programming failed (wrong CRC)! ----------\n\n");
+                else if (mode & AVR_CLEAN)
+                    printf("\n ++++++++++ Device successfully erased! ++++++++++\n\n");
                 else
                     printf("\n ++++++++++ Device successfully programmed! ++++++++++\n\n");
             }
@@ -970,10 +986,14 @@ int prog_verify (int            fd,
                 printf("\n ---------- Verification failed! ----------\n\n");
         }
 
-        printf("...starting application\n\n");
+        if (!(mode & AVR_CLEAN))
+            printf("...starting application\n\n");
+
         sendcommand(fd, START);         //start application
         sendcommand(fd, START);
     }
+    free (data);
+
     return 0;
 }
 
@@ -1034,6 +1054,14 @@ static int handle_keyboard (FILE  *input,
                 tcsetattr (desc_in, TCSAFLUSH, &old_term);
                 printf("\n== VERIFY:   Reset Target Device ==============\n");
                 prog_verify (output, AVR_VERIFY, 
+                             baud, bsize, password, device, fname);
+                tcsetattr (desc_in, TCSAFLUSH, &curr_term);
+                break;
+
+            case CTRLE:
+                tcsetattr (desc_in, TCSAFLUSH, &old_term);
+                printf("\n== ERASE:   Reset Target Device ==============\n");
+                prog_verify (output, AVR_PROGRAM | AVR_CLEAN, 
                              baud, bsize, password, device, fname);
                 tcsetattr (desc_in, TCSAFLUSH, &curr_term);
                 break;
@@ -1134,6 +1162,7 @@ static void do_v24 (int iFd)
     printf("| CTRL F: enter filename                        |\n");
     printf("| CTRL P: program file                          |\n");
     printf("| CTRL V: verify file                           |\n");
+    printf("| CTRL E: erase device                          |\n");
     printf("=================================================\n");
 
     tcgetattr (fileno (fp_stdio), &old_term);
@@ -1270,6 +1299,10 @@ int main(int argc, char *argv[])
         else if (strcmp (argv[i], "-p") == 0)
         {
             mode |= AVR_PROGRAM;
+        }
+        else if (strcmp (argv[i], "-e") == 0)
+        {
+            mode |= AVR_CLEAN;
         }
         else if (strcmp (argv[i], "-T") == 0)
         {
