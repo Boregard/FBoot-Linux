@@ -8,6 +8,7 @@
 
 
 /// Includes
+#include <sys/ioctl.h>
 #include <stdio.h>
 #include <time.h>
 #include <errno.h>
@@ -155,9 +156,15 @@ int com_read (int       fd,
               size_t    tLen)
 {
     int iNrRead;
+    int flags;
 
     do {
         iNrRead = read (fd, pszIn, tLen);
+#if 0
+        /* Get the current line bits */
+        ioctl(fd, TIOCMGET, &flags);
+        printf("Flags are %o.\n", flags);
+#endif
     } while ((iNrRead < 0) && (errno == EINTR));
 
     return (iNrRead);
