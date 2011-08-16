@@ -28,7 +28,7 @@ void com_localecho ();
  *
  * @return descriptor
  */
-int com_open(const char * device, speed_t baud);
+int com_open(const char * device, speed_t baud, int use_drain);
 
 /**
  * Close com port and restore settings
@@ -57,5 +57,10 @@ int com_read (int       fd,
  * Sending a command
  */
 void sendcommand(int fd, unsigned char c);
+
+/**
+ * Get the baud-id from baudrate, return B0 if invalid
+ */
+speed_t get_baudid (unsigned long baud);
 
 #endif //COM_H_INCLUDED

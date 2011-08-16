@@ -94,33 +94,6 @@ typedef struct bootInfo
 
 typedef struct
 {
-    unsigned long   value;
-    speed_t         constval;
-} baudInfo_t;
-baudInfo_t baudrates[] = { 
-    {     50,     B50 },
-    {     75,     B75 },
-    {    110,    B110 },
-    {    134,    B134 },
-    {    150,    B150 },
-    {    200,    B200 },
-    {    300,    B300 },
-    {    600,    B600 },
-    {   1200,   B1200 },
-    {   1800,   B1800 },
-    {   2400,   B2400 },
-    {   4800,   B4800 },
-    {   9600,   B9600 },
-    {  19200,  B19200 },
-    {  38400,  B38400 },
-    {  57600,  B57600 },
-    { 115200, B115200 },
-    { 230400, B230400 }
-};
-
-
-typedef struct
-{
     unsigned long   id;
     const char      *name;
 } avrdev_t;
@@ -629,6 +602,7 @@ void usage()
     printf("-d    Device\n");
     printf("-b    Baudrate\n");
     printf("-t    TxD Blocksize\n");
+    printf("-w    do not use tcdrain(), wait byte transmission length instead\n");
     printf("-v    Verify\n");
     printf("-p    Program\n");
     printf("-e    Erase\n");
@@ -1249,9 +1223,10 @@ int main(int argc, char *argv[])
 {
     int     fd = 0;
     int     mode = 0;
+    int     use_drain = 1;      // as default, use tcdrain
 
     // default values
-    int baudid = -1;
+    speed_t baudid = B0;
 
     struct tms timestruct;
     struct sigaction sa;
@@ -1280,7 +1255,13 @@ int main(int argc, char *argv[])
 
     for(i = 1; i < argc; i++)
     {
-        if (strcmp (argv[i], "-d") == 0)
+        if ((strcmp (argv[i], "-h") == 0) ||
+            (strcmp (argv[i], "-?") == 0))
+        {
+            usage ();
+            exit (0);
+        }
+        else if (strcmp (argv[i], "-d") == 0)
         {
             i++;
             if (i < argc)
@@ -1320,6 +1301,10 @@ int main(int argc, char *argv[])
             if (i < argc)
                 password = argv[i];
         }
+        else if (strcmp (argv[i], "-w") == 0)
+        {
+            use_drain = 0;
+        }
         else
         {
             hexfile = argv[i];
@@ -1339,27 +1324,17 @@ int main(int argc, char *argv[])
     }
 
     // Checking baudrate
-    for(i = 0; i < (sizeof (baudrates) / sizeof (baudInfo_t)); i++)
-    {
-        if (baudrates[i].value == baud)
-        {
-            baudid = i;
-            break;
-        }
-    }
+    baudid = get_baudid (baud);
 
-    if(baudid == -1)
+    if (baudid == B0)
     {
-        printf("Unknown baudrate (%i)!\nUse one of:", baud);
-        for(i = 0; i < (sizeof (baudrates) / sizeof (baudInfo_t)); i++)
-        {
-            printf (" %ld", baudrates[i].value);
-        }
-        printf ("\n");
+        printf("Unknown baudrate (%i)!\nUse standard like: "
+               "50, 110, 150, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400\n",
+               baud);
         usage();
     }
 
-    fd = com_open(device, baudrates[baudid].constval); 
+    fd = com_open(device, baudid, use_drain); 
 
     if (fd < 0)
     {

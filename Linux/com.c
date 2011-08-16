@@ -19,6 +19,35 @@
 #include "protocol.h"
 
 
+typedef struct
+{
+    unsigned long   value;
+    speed_t         constval;
+} baudInfo_t;
+static baudInfo_t baudrates[] = { 
+    {     50,     B50 },
+    {     75,     B75 },
+    {    110,    B110 },
+    {    134,    B134 },
+    {    150,    B150 },
+    {    200,    B200 },
+    {    300,    B300 },
+    {    600,    B600 },
+    {   1200,   B1200 },
+    {   1800,   B1800 },
+    {   2400,   B2400 },
+    {   4800,   B4800 },
+    {   9600,   B9600 },
+    {  19200,  B19200 },
+    {  38400,  B38400 },
+    {  57600,  B57600 },
+    { 115200, B115200 },
+    { 230400, B230400 }
+};
+
+
+
+
 /// Attributes
 
 // Old settings
@@ -28,9 +57,54 @@ unsigned int crc = 0;
 
 int sendCount = 0;
 
+int waitcount = 0;
+
+// time in usec neded for transferring one byte
+static long bytetime;
+
 /// Prototypes
 void calc_crc(unsigned char d);
 
+
+/**
+ * Get the baud-id from baudrate, return B0 if invalid
+ */
+speed_t get_baudid (unsigned long baud)
+{
+    int i;
+    speed_t baudid = B0;
+
+    for(i = 0; i < (sizeof (baudrates) / sizeof (baudInfo_t)); i++)
+    {
+        if (baudrates[i].value == baud)
+        {
+            baudid = baudrates[i].constval;
+            break;
+        }
+    }
+
+    return (baudid);
+}
+
+/**
+ * Get the time needed for transferring one byte 8N1 from baud-id, return 0 if invalid
+ */
+long get_bytetime (speed_t baudid)
+{
+    int i;
+    long btime = 0;
+
+    for(i = 0; i < (sizeof (baudrates) / sizeof (baudInfo_t)); i++)
+    {
+        if (baudrates[i].constval == baudid)
+        {
+            btime = (1000000L * 10L / baudrates[i].value) + 1;
+            break;
+        }
+    }
+
+    return (btime);
+}
 
 /**
  * Set flag for one-wire local echo
@@ -47,7 +121,7 @@ void com_localecho ()
  *
  * @return true if successfull
  */
-int com_open (const char * device, speed_t baud)
+int com_open (const char * device, speed_t baud, int use_drain)
 {
     struct termios newtio;
     int fd;
@@ -89,6 +163,16 @@ int com_open (const char * device, speed_t baud)
 
     sendCount = 0;
 
+    if (use_drain)
+    {
+        bytetime = 0;
+    }
+    else
+    {
+        // do not use tcdrain, instead wait the time...
+        // time in usec needed for transferring one byte
+        bytetime = get_bytetime (baud);
+    }
     return fd;
 }
 
@@ -97,7 +181,15 @@ int com_open (const char * device, speed_t baud)
  */
 void com_drain (int fd)
 {
-    while ((tcdrain(fd) < 0) && (errno == EINTR));
+    if (bytetime)
+    {
+        usleep (bytetime * waitcount);
+        waitcount = 0;
+    }
+    else
+    {
+        while ((tcdrain(fd) < 0) && (errno == EINTR));
+    }
 }
 
 /**
@@ -156,11 +248,11 @@ int com_read (int       fd,
               size_t    tLen)
 {
     int iNrRead;
-    int flags;
 
     do {
         iNrRead = read (fd, pszIn, tLen);
 #if 0
+        int flags;
         /* Get the current line bits */
         ioctl(fd, TIOCMGET, &flags);
         printf("Flags are %o.\n", flags);
@@ -182,6 +274,7 @@ void com_putc_fast(int           fd,
             com_getc(fd, 0);
         sendCount++;
     }
+    waitcount++;
 
     while ((write(fd, &c, 1) < 0) && (errno == EINTR));
 
