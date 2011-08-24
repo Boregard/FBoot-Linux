@@ -69,7 +69,7 @@ static int              bsize = 16;
     // 0x0A - LF,  0x0B - VT,  0x0D - CR,  0x0F - SI
     // 0x21 - '!', 0x43 - 'C', 0x61 - 'a', 0x85, 0x87
     // 0xC3 - 'A~',0xE1 - 'a´' - ISO8859-1
-static char             *password = "BMIa";
+static char             *password = "Peda";
 static char             *device = "/dev/ttyS0";
 static int              baud = 9600;
 
@@ -601,8 +601,9 @@ void usage()
     printf("./booloader [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex\n");
     printf("-d    Device\n");
     printf("-b    Baudrate\n");
-    printf("-t    TxD Blocksize\n");
-    printf("-w    do not use tcdrain(), wait byte transmission length instead\n");
+    printf("-t    TxD Blocksize (i.e. number of bytes written in one block)\n");
+    printf("-w    do not use tcdrain(), wait byte transmission time instead\n");
+    printf("-r    toggle DTR to reset device\n");
     printf("-v    Verify\n");
     printf("-p    Program\n");
     printf("-e    Erase\n");
@@ -612,6 +613,17 @@ void usage()
 
     exit(1);
 }
+
+/**
+ * Resets the connected device to put it into bootloader mode
+ */
+void prog_reset(int fd)
+{
+    com_set_dtr(fd, 0);
+    usleep(10000);
+    com_set_dtr(fd, 1);
+}
+
 
 /**
  * Try to connect a device
@@ -978,7 +990,8 @@ int prog_verify (int            fd,
  *
  ****************************************************************************/
 static int handle_keyboard (FILE  *input,
-                            int   output)
+                            int   output,
+                            int   autoreset)
 {
     static char fname[1024+1] = "";
     int         char_in = EOF;
@@ -1018,7 +1031,15 @@ static int handle_keyboard (FILE  *input,
 
             case CTRLP:
                 tcsetattr (desc_in, TCSAFLUSH, &old_term);
-                printf("\n== PROGRAM:  Reset Target Device ==============\n");
+                if (autoreset)
+                {
+                    printf("\n== PROGRAM:  Resetting Target Device ==========\n");
+                    prog_reset(output);
+                }
+                else
+                {
+                    printf("\n== PROGRAM:  Reset Target Device ==============\n");
+                }
                 prog_verify (output, AVR_PROGRAM, 
                              baud, bsize, password, device, fname);
                 tcsetattr (desc_in, TCSAFLUSH, &curr_term);
@@ -1026,7 +1047,15 @@ static int handle_keyboard (FILE  *input,
 
             case CTRLV:
                 tcsetattr (desc_in, TCSAFLUSH, &old_term);
-                printf("\n== VERIFY:   Reset Target Device ==============\n");
+                if (autoreset)
+                {
+                    printf("\n== VERIFY:   Resetting Target Device ==========\n");
+                    prog_reset(output);
+                }
+                else
+                {
+                    printf("\n== VERIFY:   Reset Target Device ==============\n");
+                }
                 prog_verify (output, AVR_VERIFY, 
                              baud, bsize, password, device, fname);
                 tcsetattr (desc_in, TCSAFLUSH, &curr_term);
@@ -1104,7 +1133,8 @@ static void handle_input (int          input,
  *      Program loop
  *
  ****************************************************************************/
-static void do_v24 (int iFd)
+static void do_v24 (int iFd,
+                    int autoreset)
 {
     int                 old_timeout;
     int                 stdio;
@@ -1178,7 +1208,7 @@ static void do_v24 (int iFd)
             if (FD_ISSET (stdio, &fdset))
             {
                 /* stdin: someone hacked the keyboard */
-                ok = handle_keyboard (fp_stdio, iFd);
+                ok = handle_keyboard (fp_stdio, iFd, autoreset);
             }
 
             /* -- we got something from serial line -- */
@@ -1227,6 +1257,7 @@ int main(int argc, char *argv[])
 
     // default values
     speed_t baudid = B0;
+    int     autoreset = 0;
 
     struct tms timestruct;
     struct sigaction sa;
@@ -1289,6 +1320,10 @@ int main(int argc, char *argv[])
         {
             mode |= AVR_TERMINAL;
         }
+        else if (strcmp (argv[i], "-r") == 0)
+        {
+            autoreset = 1;
+        }
         else if (strcmp (argv[i], "-t") == 0)
         {
             i++;
@@ -1344,10 +1379,14 @@ int main(int argc, char *argv[])
     }
 
     if (mode & (AVR_PROGRAM | AVR_VERIFY))
+    {
+        if (autoreset)
+            prog_reset(fd);
         prog_verify (fd, mode, baud, bsize, password, device, hexfile);
+    }
 
     if (mode & AVR_TERMINAL)
-        do_v24 (fd);
+        do_v24 (fd, autoreset);
 
     com_close(fd);                //close open com port
     return 0;

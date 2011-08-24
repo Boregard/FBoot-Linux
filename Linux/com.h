@@ -63,4 +63,9 @@ void sendcommand(int fd, unsigned char c);
  */
 speed_t get_baudid (unsigned long baud);
 
+/**
+ * Sets the DTR (Data Terminal Ready) on the com port
+ */
+void com_set_dtr(int fd, unsigned char on);
+
 #endif //COM_H_INCLUDED

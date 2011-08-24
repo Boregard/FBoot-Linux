@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/times.h>
+#include <sys/ioctl.h>
 
 #include "com.h"
 #include "protocol.h"
@@ -175,6 +176,33 @@ int com_open (const char * device, speed_t baud, int use_drain)
     }
     return fd;
 }
+
+/**
+ * Sets the DTR (Data Terminal Ready) on the com port
+ */
+void com_set_dtr(int fd, unsigned char on)
+{
+    int flags;
+
+    if (ioctl (fd, TIOCMGET, &flags) < 0)
+    {
+        perror ("ERROR: could not reset, getting V24 line status failed");
+        return;
+    }
+    if (on)
+    {
+        flags |=  TIOCM_DTR;
+    }
+    else
+    {
+        flags &= ~TIOCM_DTR;
+    }
+    if (ioctl (fd, TIOCMSET, &flags) < 0)
+    {
+        perror ("ERROR: could not reset, setting V24 line status failed");
+    }
+}
+
 
 /**
  * Make sure all is written out....
