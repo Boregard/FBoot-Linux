@@ -122,7 +122,7 @@ void com_localecho ()
  *
  * @return true if successfull
  */
-int com_open (const char * device, speed_t baud, int use_drain)
+int com_open (const char * device, speed_t baud, int wait_bytetime)
 {
     struct termios newtio;
     int fd;
@@ -165,16 +165,18 @@ int com_open (const char * device, speed_t baud, int use_drain)
 
     sendCount = 0;
 
-    if (use_drain)
-    {
-        bytetime = 0;
-    }
-    else
+    if (wait_bytetime)
     {
         // do not use tcdrain, instead wait the time...
         // time in usec needed for transferring one byte
-        bytetime = get_bytetime (baud);
+        // multiplied by the number of bytetimes that should be waited
+        bytetime = get_bytetime (baud) * wait_bytetime;
     }
+    else
+    {
+        bytetime = 0;
+    }
+
     return fd;
 }
 

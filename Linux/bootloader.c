@@ -604,21 +604,24 @@ int programflash (int           fd,
 /**
  * prints usage
  */
-void usage()
+void usage(char *name)
 {
-    printf("./booloader [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex\n");
-    printf("-d    Device\n");
-    printf("-b    Baudrate\n");
-    printf("-t    TxD Blocksize (i.e. number of bytes written in one block)\n");
-    printf("-w    do not use tcdrain(), wait byte transmission time instead\n");
-    printf("-r    toggle DTR to reset device, set DTR low for reset, wait, set DTR high\n");
-    printf("-R    toggle DTR to reset device, set DTR high for reset, wait, set DTR low\n");
-    printf("-v    Verify\n");
-    printf("-p    Program\n");
-    printf("-e    Erase\n");
-    printf("-P    Password\n");
-    printf("-T    enter terminal mode\n");
-    printf("Author: Bernhard Michler (based on code from Andreas Butti)\n");
+    printf("%s [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex\n"
+           "-d /dev/ttynn   Device\n"
+           "-b nn           Baudrate\n"
+           "-t nn           TxD Blocksize (i.e. number of bytes written in one block)\n"
+           "-w nn           do not use tcdrain, wait nn times byte transmission time instead\n"
+           "-r              toggle DTR to reset device:\n"
+           "                set DTR low for reset, wait, set DTR high\n"
+           "-R              toggle DTR to reset device:\n"
+           "                set DTR high for reset, wait, set DTR low\n"
+           "-v              Verify\n"
+           "-p              Program\n"
+           "-e              Erase, use together with -p to erase controller,\n"
+           "                with -v to check if it is erased\n"
+           "-P pwd          Password\n"
+           "-T              enter terminal mode\n"
+           "Author: Bernhard Michler (based on code from Andreas Butti)\n", name);
 
     exit(1);
 }
@@ -1276,7 +1279,7 @@ int main(int argc, char *argv[])
 {
     int     fd = 0;
     int     mode = 0;
-    int     use_drain = 1;      // as default, use tcdrain
+    int     wait_bytetime = 0;  // as default, use tcdrain instead of waiting
 
     // default values
     speed_t     baudid = B0;
@@ -1312,7 +1315,7 @@ int main(int argc, char *argv[])
         if ((strcmp (argv[i], "-h") == 0) ||
             (strcmp (argv[i], "-?") == 0))
         {
-            usage ();
+            usage (argv[0]);
             exit (0);
         }
         else if (strcmp (argv[i], "-d") == 0)
@@ -1365,7 +1368,9 @@ int main(int argc, char *argv[])
         }
         else if (strcmp (argv[i], "-w") == 0)
         {
-            use_drain = 0;
+            i++;
+            if (i < argc)
+                wait_bytetime = atoi(argv[i]);
         }
         else
         {
@@ -1376,13 +1381,13 @@ int main(int argc, char *argv[])
     if ((hexfile == NULL) && (mode & (AVR_PROGRAM | AVR_VERIFY)))
     {
         printf("No hexfile specified!\n");
-        usage();
+        usage(argv[0]);
     }
 
     if (mode == 0)
     {
         printf("No Verify / Program specified!\n");
-        usage();
+        usage(argv[0]);
     }
 
     // Checking baudrate
@@ -1393,10 +1398,10 @@ int main(int argc, char *argv[])
         printf("Unknown baudrate (%i)!\nUse standard like: "
                "50, 110, 150, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400\n",
                baud);
-        usage();
+        usage(argv[0]);
     }
 
-    fd = com_open(device, baudid, use_drain); 
+    fd = com_open(device, baudid, wait_bytetime); 
 
     if (fd < 0)
     {
