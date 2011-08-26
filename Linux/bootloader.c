@@ -1359,6 +1359,11 @@ int main(int argc, char *argv[])
             i++;
             if (i < argc)
                 bsize = atoi(argv[i]);
+            if (bsize <= 0)
+            {
+                printf ("Blocksize %d not allowed, setting it to 1\n", bsize);
+                bsize = 1;
+            }
         }
         else if (strcmp (argv[i], "-P") == 0)
         {
