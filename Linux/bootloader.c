@@ -54,6 +54,14 @@
     (a) = (double) (stop - start) / ticks;  \
 }
 
+// enum for autoreset
+typedef enum {
+    NO_AUTORESET  = 0,      // don't reset
+    HIGH_AUTORESET,         // reset is active high
+    LOW_AUTORESET           // reset is active low
+} autoreset_t;
+
+
 /**************************************************************/
 /*                          GLOBALS                           */
 /**************************************************************/
@@ -603,7 +611,8 @@ void usage()
     printf("-b    Baudrate\n");
     printf("-t    TxD Blocksize (i.e. number of bytes written in one block)\n");
     printf("-w    do not use tcdrain(), wait byte transmission time instead\n");
-    printf("-r    toggle DTR to reset device\n");
+    printf("-r    toggle DTR to reset device, set DTR low for reset, wait, set DTR high\n");
+    printf("-R    toggle DTR to reset device, set DTR high for reset, wait, set DTR low\n");
     printf("-v    Verify\n");
     printf("-p    Program\n");
     printf("-e    Erase\n");
@@ -617,11 +626,26 @@ void usage()
 /**
  * Resets the connected device to put it into bootloader mode
  */
-void prog_reset(int fd)
+void prog_reset(int         fd,
+                autoreset_t res)
 {
-    com_set_dtr(fd, 0);
-    usleep(10000);
-    com_set_dtr(fd, 1);
+    switch (res) 
+    {
+        case LOW_AUTORESET:
+            com_set_dtr(fd, 0);
+            usleep(10000);
+            com_set_dtr(fd, 1);
+            break;
+
+        case HIGH_AUTORESET:
+            com_set_dtr(fd, 1);
+            usleep(10000);
+            com_set_dtr(fd, 0);
+            break;
+
+        default:
+            break;
+    }
 }
 
 
@@ -688,7 +712,7 @@ int connect_device ( int fd,
     printf ("\nTerminated by user.\n");
 
     return 0;
-}//void connect_device()
+}
 
 
 /**
@@ -875,7 +899,6 @@ int prog_verify (int            fd,
     // set to maximun, is later in read_info corrected to the
     // size available in the controller...
     bootinfo.flashsize = MAXFLASH;
-    bootinfo.blocksize = 16;
     bootinfo.blocksize = block_size;
 
     printf ("Now: ");
@@ -1025,16 +1048,16 @@ static int handle_keyboard (FILE  *input,
                 tcsetattr (desc_in, TCSAFLUSH, &old_term);
                 printf ("\nEnter Filename: ");
                 scanf ("%s", fname);
-                printf ("\nstart DOWNLOAD with CTRL D...\n");
+                printf ("\nstart programming with CTRL P, verifying with CTRL V...\n");
                 tcsetattr (desc_in, TCSAFLUSH, &curr_term);
                 break;
 
             case CTRLP:
                 tcsetattr (desc_in, TCSAFLUSH, &old_term);
-                if (autoreset)
+                if (autoreset != NO_AUTORESET)
                 {
                     printf("\n== PROGRAM:  Resetting Target Device ==========\n");
-                    prog_reset(output);
+                    prog_reset(output, autoreset);
                 }
                 else
                 {
@@ -1047,10 +1070,10 @@ static int handle_keyboard (FILE  *input,
 
             case CTRLV:
                 tcsetattr (desc_in, TCSAFLUSH, &old_term);
-                if (autoreset)
+                if (autoreset != NO_AUTORESET)
                 {
                     printf("\n== VERIFY:   Resetting Target Device ==========\n");
-                    prog_reset(output);
+                    prog_reset(output, autoreset);
                 }
                 else
                 {
@@ -1256,8 +1279,8 @@ int main(int argc, char *argv[])
     int     use_drain = 1;      // as default, use tcdrain
 
     // default values
-    speed_t baudid = B0;
-    int     autoreset = 0;
+    speed_t     baudid = B0;
+    autoreset_t autoreset = NO_AUTORESET;
 
     struct tms timestruct;
     struct sigaction sa;
@@ -1322,7 +1345,11 @@ int main(int argc, char *argv[])
         }
         else if (strcmp (argv[i], "-r") == 0)
         {
-            autoreset = 1;
+            autoreset = LOW_AUTORESET;
+        }
+        else if (strcmp (argv[i], "-R") == 0)
+        {
+            autoreset = HIGH_AUTORESET;
         }
         else if (strcmp (argv[i], "-t") == 0)
         {
@@ -1380,10 +1407,16 @@ int main(int argc, char *argv[])
 
     if (mode & (AVR_PROGRAM | AVR_VERIFY))
     {
-        if (autoreset)
-            prog_reset(fd);
+        prog_reset (fd, autoreset);
         prog_verify (fd, mode, baud, bsize, password, device, hexfile);
     }
+    else if (mode & (AVR_CLEAN))
+    {
+        printf ("You specified '-e' (for erase) without further option.\n"
+                "Please add    '-p' if you want to erase the controller, or\n"
+                "              '-v' if you want to check if the controller is empty!\n");
+    }
+
 
     if (mode & AVR_TERMINAL)
         do_v24 (fd, autoreset);

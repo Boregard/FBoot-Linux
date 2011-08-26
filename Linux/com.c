@@ -155,6 +155,7 @@ int com_open (const char * device, speed_t baud, int use_drain)
 
     // Setting baudrate
     cfsetispeed(&newtio, baud);
+    cfsetospeed(&newtio, baud);
 
     // Flushing buffer
     tcflush(fd, TCIOFLUSH);
