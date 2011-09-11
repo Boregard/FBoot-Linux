@@ -129,7 +129,7 @@ avrdev_t avr_dev[] = {
     { 0x01e9609,    "ATmega644" },
     { 0x01e9802,    "ATmega2561" }
 };
-    
+
 
 
 /*****************************************************************************
@@ -434,6 +434,9 @@ void print_perc_bar (char          *text,
     unsigned short columns = 80;
     struct winsize win_size;
 
+    if (full_val == 0)
+        return;
+
     if (text)
         txtlen += strlen (text);
 
@@ -443,6 +446,7 @@ void print_perc_bar (char          *text,
         columns = win_size.ws_col;
     }
     cur100p  = columns - txtlen;
+
     cur_perc = (cur_val * cur100p) / full_val;
 
     printf ("%s [", text ? text : "");
@@ -632,7 +636,7 @@ void usage(char *name)
 void prog_reset(int         fd,
                 autoreset_t res)
 {
-    switch (res) 
+    switch (res)
     {
         case LOW_AUTORESET:
             com_set_dtr(fd, 0);
@@ -677,7 +681,7 @@ int connect_device ( int fd,
         printf("\b%c", ANIM_CHARS[state++ & 3]);
         fflush(stdout);
 
-        do 
+        do
         {
             if (*s)
                 com_putc(fd, *s);
@@ -755,7 +759,7 @@ int check_crc(int fd)
  *
  * @return true on success; exit on error
  */
-int read_info (int fd, 
+int read_info (int fd,
                bootInfo_t *bInfo)
 {
     long i, j;
@@ -1066,7 +1070,7 @@ static int handle_keyboard (FILE  *input,
                 {
                     printf("\n== PROGRAM:  Reset Target Device ==============\n");
                 }
-                prog_verify (output, AVR_PROGRAM, 
+                prog_verify (output, AVR_PROGRAM,
                              baud, bsize, password, device, fname);
                 tcsetattr (desc_in, TCSAFLUSH, &curr_term);
                 break;
@@ -1082,7 +1086,7 @@ static int handle_keyboard (FILE  *input,
                 {
                     printf("\n== VERIFY:   Reset Target Device ==============\n");
                 }
-                prog_verify (output, AVR_VERIFY, 
+                prog_verify (output, AVR_VERIFY,
                              baud, bsize, password, device, fname);
                 tcsetattr (desc_in, TCSAFLUSH, &curr_term);
                 break;
@@ -1090,7 +1094,7 @@ static int handle_keyboard (FILE  *input,
             case CTRLE:
                 tcsetattr (desc_in, TCSAFLUSH, &old_term);
                 printf("\n== ERASE:   Reset Target Device ==============\n");
-                prog_verify (output, AVR_PROGRAM | AVR_CLEAN, 
+                prog_verify (output, AVR_PROGRAM | AVR_CLEAN,
                              baud, bsize, password, device, fname);
                 tcsetattr (desc_in, TCSAFLUSH, &curr_term);
                 break;
@@ -1406,11 +1410,11 @@ int main(int argc, char *argv[])
         usage(argv[0]);
     }
 
-    fd = com_open(device, baudid, wait_bytetime); 
+    fd = com_open(device, baudid, wait_bytetime);
 
     if (fd < 0)
     {
-        printf("Opening com port \"%s\" failed (%s)!\n", 
+        printf("Opening com port \"%s\" failed (%s)!\n",
                device, strerror (errno));
         exit(2);
     }
