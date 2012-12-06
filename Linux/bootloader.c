@@ -38,6 +38,7 @@
 #define ESC     0x1b
 #define CTRLC   0x03
 #define CTRLP   0x10
+#define CTRLR   0x12
 #define CTRLE   0x05
 #define CTRLF   0x06
 #define CTRLV   0x16
@@ -106,28 +107,94 @@ typedef struct
     const char      *name;
 } avrdev_t;
 avrdev_t avr_dev[] = {
-    { 0x01e9007,    "ATtiny13" },
-    { 0x01e910a,    "ATtiny2313" },
-    { 0x01e9205,    "ATmega48" },
-    { 0x01e9206,    "ATtiny45" },
-    { 0x01e9207,    "ATtiny44" },
-    { 0x01e9208,    "ATtiny461" },
-    { 0x01e9306,    "ATmega8515" },
-    { 0x01e9307,    "ATmega8" },
-    { 0x01e9308,    "ATmega8535" },
-    { 0x01e930a,    "ATmega88" },
-    { 0x01e930b,    "ATtiny85" },
-    { 0x01e930c,    "ATtiny84" },
-    { 0x01e930d,    "ATtiny861" },
-    { 0x01e930f,    "ATmega88P" },
-    { 0x01e9403,    "ATmega16" },
-    { 0x01e9404,    "ATmega162" },
-    { 0x01e9406,    "ATmega168" },
-    { 0x01e9501,    "ATmega323" },
-    { 0x01e9502,    "ATmega32" },
-    { 0x01e950f,    "ATmega328" },
-    { 0x01e9609,    "ATmega644" },
-    { 0x01e9802,    "ATmega2561" }
+    { 0x01e9005, "ATtiny12" },
+    { 0x01e9007, "ATtiny13" },
+    { 0x01e9006, "ATtiny15" },
+    { 0x01e9001, "AT90S1200" },
+    { 0x01e9201, "AT90S4414" },
+    { 0x01e9101, "AT90S2313" },
+    { 0x01e9105, "AT90S2333" },
+    { 0x01e9103, "AT90S2343" },
+    { 0x01e9203, "AT90S4433" },
+    { 0x01e9202, "AT90S4434" },
+    { 0x01e9301, "AT90S8515" },
+    { 0x01e9303, "AT90S8535" },
+    { 0x01e9701, "ATmega103" },
+    { 0x01e9602, "ATmega64" },
+    { 0x01e9702, "ATmega128" },
+    { 0x01e9781, "AT90CAN128" },
+    { 0x01e9681, "AT90CAN64" },
+    { 0x01e9581, "AT90CAN32" },
+    { 0x01e9403, "ATmega16" },
+    { 0x01e940a, "ATmega164P" },
+    { 0x01e9508, "ATmega324P" },
+    { 0x01e9511, "ATmega324PA" },
+    { 0x01e9609, "ATmega644" },
+    { 0x01e960a, "ATmega644P" },
+    { 0x01e9705, "ATmega1284P" },
+    { 0x01e9404, "ATmega162" },
+    { 0x01e9402, "ATmega163" },
+    { 0x01e9405, "ATmega169" },
+    { 0x01e9503, "ATmega329" },
+    { 0x01e950b, "ATmega329P" },
+    { 0x01e9504, "ATmega3290" },
+    { 0x01e950c, "ATmega3290P" },
+    { 0x01e9603, "ATmega649" },
+    { 0x01e9604, "ATmega6490" },
+    { 0x01e9502, "ATmega32" },
+    { 0x01e9401, "ATmega161" },
+    { 0x01e9307, "ATmega8" },
+    { 0x01e9306, "ATmega8515" },
+    { 0x01e9308, "ATmega8535" },
+    { 0x01e9109, "ATtiny26" },
+    { 0x01e910c, "ATtiny261" },
+    { 0x01e9208, "ATtiny461" },
+    { 0x01e930d, "ATtiny861" },
+    { 0x01e9205, "ATmega48" },
+    { 0x01e930a, "ATmega88" },
+    { 0x01e930f, "ATmega88P" },
+    { 0x01e9406, "ATmega168" },
+    { 0x01e940b, "ATmega168P" },
+    { 0x01e9311, "ATtiny88" },
+    { 0x01e9514, "ATmega328" },
+    { 0x01e950F, "ATmega328P" },
+    { 0x01e910a, "ATtiny2313" },
+    { 0x01e920d, "ATtiny4313" },
+    { 0x01e9381, "AT90PWM2" },
+    { 0x01e9381, "AT90PWM3" },
+    { 0x01e9383, "AT90PWM2B" },
+    { 0x01e9383, "AT90PWM3B" },
+    { 0x01e9108, "ATtiny25" },
+    { 0x01e9206, "ATtiny45" },
+    { 0x01e930b, "ATtiny85" },
+    { 0x01e9608, "ATmega640" },
+    { 0x01e9703, "ATmega1280" },
+    { 0x01e9704, "ATmega1281" },
+    { 0x01e9801, "ATmega2560" },
+    { 0x01e9802, "ATmega2561" },
+    { 0x01ea701, "ATmega128RFA1" },
+    { 0x01e910b, "ATtiny24" },
+    { 0x01e9207, "ATtiny44" },
+    { 0x01e930c, "ATtiny84" },
+    { 0x01e9587, "ATmega32U4" },
+    { 0x01e9682, "AT90USB646" },
+    { 0x01e9682, "AT90USB647" },
+    { 0x01e9782, "AT90USB1286" },
+    { 0x01e9782, "AT90USB1287" },
+    { 0x01e9482, "AT90USB162" },
+    { 0x01e9382, "AT90USB82" },
+    { 0x01e958a, "ATmega32U2" },
+    { 0x01e9489, "ATmega16U2" },
+    { 0x01e9389, "ATmega8U2" },
+    { 0x01e9505, "ATmega325" },
+    { 0x01E9605, "ATmega645" },
+    { 0x01E9506, "ATmega3250" },
+    { 0x01E9606, "ATmega6450" },
+    { 0x0EDC03F, "32UC3A0512" },
+    { 0x01e8f0a, "ATtiny4" },
+    { 0x01e8f09, "ATtiny5" },
+    { 0x01e9008, "ATtiny9" },
+    { 0x01e9003, "ATtiny10" }
 };
 
 
@@ -376,11 +443,16 @@ long readval(int fd)
 
     while(1)
     {
-        i = com_getc(fd, TIMEOUT);
-        if(i == -1)
+        i = com_getc (fd, TIMEOUT);
+        if (i == COM_TIMEOUT)
         {
             printf("readval: ...Device does not answer!\n");
             return -3;
+        }
+        else if (i == COM_DISCONNECT)
+        {
+            printf("readval: ...Device disconnected!\n");
+            return -4;
         }
 
         switch(j)
@@ -488,7 +560,6 @@ int verifyflash (int           fd,
     }
     printf( "Verify        : 0x00000 - 0x%05lX\n", lastaddr);
 
-    // Sending data to MC
     do
     {
         if ((addr % 16) == 0)
@@ -521,9 +592,18 @@ int verifyflash (int           fd,
     com_putc(fd, ESCAPE);
     com_putc(fd, ESC_SHIFT); // A5,80 = End
 
-    if (com_getc(fd, TIMEOUTP) == SUCCESS)
-        return 1;
-
+    switch (com_getc (fd, TIMEOUTP))
+    {
+        case SUCCESS:
+            // o.k.
+            break;
+        case COM_DISCONNECT:
+            printf("\n ---- Device disconnected ----");
+            // FALLTHROUGH
+        default:
+        printf("\n ---------- Failed! ----------\n");
+        return 3;
+    }
     return 0;
 }
 
@@ -541,7 +621,7 @@ int programflash (int           fd,
     clock_t end_time;         //time
     float   seconds;
 
-    int    i;
+    unsigned long i;
     unsigned char d1;
     unsigned long addr = 0;
 
@@ -573,11 +653,17 @@ int programflash (int           fd,
 
         if (--i == 0)
         {
-            if (com_getc (fd, TIMEOUTP) != CONTINUE)
+            switch (com_getc (fd, TIMEOUTP))
             {
-                printf("\n ---------- Failed! ----------\n");
-                free(data);
-                return 0;
+                case CONTINUE:
+                    // o.k.
+                    break;
+                case COM_DISCONNECT:
+                    printf("\n ---- Device disconnected ----");
+                    // FALLTHROUGH
+                default:
+                    printf("\n ---------- Failed! ----------\n");
+                    return 2;
             }
 
             // set nr of bytes with next block
@@ -597,9 +683,18 @@ int programflash (int           fd,
     com_putc(fd, ESCAPE);
     com_putc(fd, ESC_SHIFT); // A5,80 = End
 
-    if (com_getc(fd, TIMEOUTP) == SUCCESS)
-        return 1;
-
+    switch (com_getc (fd, TIMEOUTP))
+    {
+        case SUCCESS:
+            // o.k.
+            break;
+        case COM_DISCONNECT:
+            printf("\n ---- Device disconnected ----");
+            // FALLTHROUGH
+        default:
+        printf("\n ---------- Failed! ----------\n");
+        return 3;
+    }
     return 0;
 }
 
@@ -665,11 +760,13 @@ int connect_device ( int fd,
     const char * ANIM_CHARS = "-\\|/";
 
     int state = 0;
-    int in = 0;
+    int val = 0;
 
     char passtring[32];
 
-    sprintf (passtring, "%s%c", password, 0xff);
+    // first 0x0d for autobaud, then password, then 0xff
+    // for answer in one-line mode
+    sprintf (passtring, "%c%s%c", 0x0d, password, 0xff);
 
     printf("Waiting for device...  ");
 
@@ -677,25 +774,26 @@ int connect_device ( int fd,
     {
         const char *s = passtring; //password;
 
+        // toggle Reset regularly
+        if ((state & 0x0f) == 0x00)
+            com_toggle_dtr (fd);
+
         usleep (25000);     // just to slow animation...
         printf("\b%c", ANIM_CHARS[state++ & 3]);
         fflush(stdout);
 
-        do
+        while ((val = *s++) != 0)
         {
-            if (*s)
-                com_putc(fd, *s);
-            else
-                com_putc(fd, 0x0ff);
+            com_putc(fd, val);
 
-            in = com_getc(fd, 0);
+            val = com_getc(fd, 0);
 
-            if (in == CONNECT)
+            if (val == CONNECT)
             {
                 printf ("\bconnected");
 
                 // clear buffer from echo...
-                while (com_getc(fd, TIMEOUT) != -1);
+                while (com_getc(fd, TIMEOUT) > 0);
 
                 sendcommand( fd, COMMAND );
 
@@ -703,18 +801,27 @@ int connect_device ( int fd,
                 {
                     switch(com_getc(fd, TIMEOUT))
                     {
+                        case COM_DISCONNECT:
+                            printf ("\nDevice disconnected.\n");
+                            return 0;
+                            break;
                         case COMMAND:
                             com_localecho();
                             printf (" (one wire)");
                             break;
                         case SUCCESS:
-                        case -1:
+                        case COM_TIMEOUT:
                             printf ("!\n");
                             return 1;
                     }
                 }
             }
-        } while (*s++);
+            else if (val == COM_DISCONNECT)
+            {
+                printf ("\nDevice disconnected.\n");
+                return 0;
+            }
+        }
     }
     printf ("\nTerminated by user.\n");
 
@@ -726,6 +833,12 @@ int connect_device ( int fd,
  * Checking CRC Support
  *
  * @return 2 if no crc support, 0 if crc supported, 1 fail, exit on timeout
+ *
+ * Sequence is:
+ * send COMMAND CHECK_CRC  lobyte(crc) hibyte(crc)
+ *      0xA5    0x06       0xnn        0xnn
+ * wait for SUCCESS, FAIL, BADCOMMAND
+ *          0xAA     0xAB  0xA7
  */
 int check_crc(int fd)
 {
@@ -746,7 +859,9 @@ int check_crc(int fd)
             return 2;
         case FAIL:
             return 1;
-        case -1:
+        case COM_DISCONNECT:
+            // FALLTHROUGH
+        case COM_TIMEOUT:
             printf("check_crc: ...Device does not answer!\n\n");
             // FALLTHROUGH
         default:
@@ -903,12 +1018,12 @@ int prog_verify (int            fd,
     // init bootinfo
     memset (&bootinfo, 0, sizeof (bootinfo));
 
-    // set to maximun, is later in read_info corrected to the
+    // set to maximum, is later in read_info corrected to the
     // size available in the controller...
     bootinfo.flashsize = MAXFLASH;
     bootinfo.blocksize = block_size;
 
-    printf ("Now: ");
+    printf ("Now ");
     if (mode & AVR_CLEAN)
         printf ("erase, ");
     if (mode & AVR_PROGRAM)
@@ -962,9 +1077,10 @@ int prog_verify (int            fd,
         {
             last_addr = bootinfo.flashsize - 1;
         }
-        else
+
         // now check if program fits into flash
-        if (last_addr >= bootinfo.flashsize)
+        if ((mode & (AVR_PROGRAM | AVR_VERIFY)) &&
+            (last_addr >= bootinfo.flashsize  ))
         {
             printf ("ERROR: Hex-file too large for target!\n"
                     "       (needs flash-size of %ld bytes, we have %ld bytes)\n",
@@ -974,7 +1090,7 @@ int prog_verify (int            fd,
 
         if (mode & AVR_PROGRAM)
         {
-            if (programflash (fd, data, last_addr, &bootinfo))
+            if (programflash (fd, data, last_addr, &bootinfo) == 0)
             {
                 if ((bootinfo.crc_on != 2) && (check_crc(fd) != 0))
                     printf("\n ---------- Programming failed (wrong CRC)! ----------\n\n");
@@ -991,7 +1107,7 @@ int prog_verify (int            fd,
         }
         if (mode & AVR_VERIFY)
         {
-            if (verifyflash (fd, data, last_addr, &bootinfo))
+            if (verifyflash (fd, data, last_addr, &bootinfo) == 0)
             {
                 if ((bootinfo.crc_on != 2) && (check_crc(fd) != 0))
                     printf("\n ---------- Verification failed (wrong CRC)! ----------\n\n");
@@ -1121,8 +1237,8 @@ static int handle_keyboard (FILE  *input,
  *      Handle V24 input
  *
  ****************************************************************************/
-static void handle_input (int          input,
-                          FILE         *output)
+static int handle_input (int    input,
+                         FILE   *output)
 {
     static char         readbuf[1024+1];
     int                 i;
@@ -1156,6 +1272,8 @@ static void handle_input (int          input,
         }
     } while (bytes_read > 0);
     fflush (output);
+
+    return (bytes_read);
 }
 
 /*****************************************************************************
@@ -1245,7 +1363,8 @@ static void do_v24 (int iFd,
             if (FD_ISSET (iFd, &fdset))
             {
                 /* handle V24 input here */
-                handle_input (iFd, fp_stdio);
+                if (handle_input (iFd, fp_stdio) < 0)
+                    ok = FALSE;
             }
         }
         else if (ret_val < 0)

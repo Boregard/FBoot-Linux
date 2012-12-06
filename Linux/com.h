@@ -13,6 +13,10 @@
 #include <termios.h>
 #include <unistd.h>
 
+
+#define COM_TIMEOUT     -1
+#define COM_DISCONNECT  -2
+
 extern unsigned int crc;
 
 /// Prototypes
@@ -67,5 +71,14 @@ speed_t get_baudid (unsigned long baud);
  * Sets the DTR (Data Terminal Ready) on the com port
  */
 void com_set_dtr(int fd, unsigned char on);
+
+/**
+ * Toggles the DTR (Data Terminal Ready) on the com port
+ */
+void com_toggle_dtr(int fd);
+
+void calc_crc(unsigned char d);
+
+int get_device_status(int fd);
 
 #endif //COM_H_INCLUDED

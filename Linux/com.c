@@ -25,7 +25,7 @@ typedef struct
     unsigned long   value;
     speed_t         constval;
 } baudInfo_t;
-static baudInfo_t baudrates[] = { 
+static baudInfo_t baudrates[] = {
     {     50,     B50 },
     {     75,     B75 },
     {    110,    B110 },
@@ -118,6 +118,22 @@ void com_localecho ()
 
 
 /**
+ * Get status of device. It might happen that the device disappears (e.g.
+ * due to a USB-serial unplug).
+ *
+ * @return 1 if device seems ok, 0 if it seems not available
+ */
+int get_device_status(int fd)
+{
+    struct termios t;
+
+    if (fd < 0)
+        return 0;
+
+    return !tcgetattr(fd, &t);
+}
+
+/**
  * Opens com port
  *
  * @return true if successfull
@@ -208,6 +224,33 @@ void com_set_dtr(int fd, unsigned char on)
 
 
 /**
+ * Toggles the DTR (Data Terminal Ready) on the com port
+ */
+void com_toggle_dtr(int fd)
+{
+    int flags;
+
+    if (ioctl (fd, TIOCMGET, &flags) < 0)
+    {
+        perror ("ERROR: could not reset, getting V24 line status failed");
+        return;
+    }
+    if (flags & TIOCM_DTR)
+    {
+        flags &= ~TIOCM_DTR;
+    }
+    else
+    {
+        flags |=  TIOCM_DTR;
+    }
+    if (ioctl (fd, TIOCMSET, &flags) < 0)
+    {
+        perror ("ERROR: could not reset, setting V24 line status failed");
+    }
+}
+
+
+/**
  * Make sure all is written out....
  */
 void com_drain (int fd)
@@ -242,7 +285,7 @@ void com_close(int fd)
  * timeout in 10th of seconds
  */
 int com_getc(int fd,
-             int timeout) 
+             int timeout)
 {
     static long         ticks = 0;
     static struct tms   theTimes;
@@ -252,8 +295,12 @@ int com_getc(int fd,
     if (ticks == 0)
         ticks = sysconf(_SC_CLK_TCK) / 10;
 
-    do 
+    do
     {
+        if (!get_device_status(fd))
+        {
+            return COM_DISCONNECT;
+        }
         if (read(fd, &c, 1) == 1)
         {
             if (sendCount > 1)
@@ -266,7 +313,7 @@ int com_getc(int fd,
         }
     } while ( ((times (&theTimes) - t )/ticks) < timeout );
 
-    return -1;
+    return COM_TIMEOUT;
 }
 
 /*****************************************************************************
@@ -281,6 +328,12 @@ int com_read (int       fd,
     int iNrRead;
 
     do {
+        if (!get_device_status(fd))
+        {
+            printf ("\nDevice disconnected!\n");
+            return -1;
+        }
+
         iNrRead = read (fd, pszIn, tLen);
 #if 0
         int flags;
@@ -312,7 +365,7 @@ void com_putc_fast(int           fd,
     calc_crc( c ); // calculate transmit CRC
 }
 
-void com_putc(int fd, unsigned char c) 
+void com_putc(int fd, unsigned char c)
 {
     com_drain(fd);
     com_putc_fast (fd, c);
@@ -335,7 +388,7 @@ void sendcommand(int fd, unsigned char c)
 /**
  * Calculate the new CRC sum
  */
-void calc_crc(unsigned char d) 
+void calc_crc(unsigned char d)
 {
     int i;
 
