@@ -714,7 +714,7 @@ void usage(char *name)
            "-w nn           do not use tcdrain, wait nn times byte transmission time instead\n"
            "-r              switch reset off, DTR will not be changed\n"
            "-R (default)    toggle DTR to reset device: DTR will toggle\n"
-           "                during sending of password until connection is establisched\n"
+           "                during sending of password until connection is established\n"
            "-v              Verify\n"
            "-p              Program\n"
            "-e              Erase, use together with -p to erase controller,\n"
