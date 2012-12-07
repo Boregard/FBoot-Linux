@@ -58,8 +58,7 @@
 // enum for autoreset
 typedef enum {
     NO_AUTORESET  = 0,      // don't reset
-    HIGH_AUTORESET,         // reset is active high
-    LOW_AUTORESET           // reset is active low
+    AUTORESET
 } autoreset_t;
 
 
@@ -71,10 +70,13 @@ static FILE             *fp_stdio = NULL; /* filepointer to normal terminal */
 static int              running = TRUE;
 static int              esc_seq = 0;
 
+// default is Reset via DTR
+static autoreset_t autoreset = AUTORESET;
+
 static int              bsize = 16;
 
     // pointer to password...
-    // must contain one of
+    // following characters are needed for autobaud
     // 0x0A - LF,  0x0B - VT,  0x0D - CR,  0x0F - SI
     // 0x21 - '!', 0x43 - 'C', 0x61 - 'a', 0x85, 0x87
     // 0xC3 - 'A~',0xE1 - 'a´' - ISO8859-1
@@ -725,31 +727,6 @@ void usage(char *name)
     exit(1);
 }
 
-/**
- * Resets the connected device to put it into bootloader mode
- */
-void prog_reset(int         fd,
-                autoreset_t res)
-{
-    switch (res)
-    {
-        case LOW_AUTORESET:
-            com_set_dtr(fd, 0);
-            usleep(10000);
-            com_set_dtr(fd, 1);
-            break;
-
-        case HIGH_AUTORESET:
-            com_set_dtr(fd, 1);
-            usleep(10000);
-            com_set_dtr(fd, 0);
-            break;
-
-        default:
-            break;
-    }
-}
-
 
 /**
  * Try to connect a device
@@ -774,9 +751,11 @@ int connect_device ( int fd,
     {
         const char *s = passtring; //password;
 
-        // toggle Reset regularly
-        if ((state & 0x0f) == 0x00)
-            com_toggle_dtr (fd);
+        if (autoreset == AUTORESET)
+        {
+            if ((state & 0x0f) == 0x00)
+                com_toggle_dtr (fd);
+        }
 
         usleep (25000);     // just to slow animation...
         printf("\b%c", ANIM_CHARS[state++ & 3]);
@@ -1136,8 +1115,7 @@ int prog_verify (int            fd,
  *
  ****************************************************************************/
 static int handle_keyboard (FILE  *input,
-                            int   output,
-                            int   autoreset)
+                            int   output)
 {
     static char fname[1024+1] = "";
     int         char_in = EOF;
@@ -1180,7 +1158,6 @@ static int handle_keyboard (FILE  *input,
                 if (autoreset != NO_AUTORESET)
                 {
                     printf("\n== PROGRAM:  Resetting Target Device ==========\n");
-                    prog_reset(output, autoreset);
                 }
                 else
                 {
@@ -1196,7 +1173,6 @@ static int handle_keyboard (FILE  *input,
                 if (autoreset != NO_AUTORESET)
                 {
                     printf("\n== VERIFY:   Resetting Target Device ==========\n");
-                    prog_reset(output, autoreset);
                 }
                 else
                 {
@@ -1281,8 +1257,7 @@ static int handle_input (int    input,
  *      Program loop
  *
  ****************************************************************************/
-static void do_v24 (int iFd,
-                    int autoreset)
+static void do_v24 (int iFd)
 {
     int                 old_timeout;
     int                 stdio;
@@ -1356,7 +1331,7 @@ static void do_v24 (int iFd,
             if (FD_ISSET (stdio, &fdset))
             {
                 /* stdin: someone hacked the keyboard */
-                ok = handle_keyboard (fp_stdio, iFd, autoreset);
+                ok = handle_keyboard (fp_stdio, iFd);
             }
 
             /* -- we got something from serial line -- */
@@ -1406,7 +1381,6 @@ int main(int argc, char *argv[])
 
     // default values
     speed_t     baudid = B0;
-    autoreset_t autoreset = NO_AUTORESET;
 
     struct tms timestruct;
     struct sigaction sa;
@@ -1471,11 +1445,11 @@ int main(int argc, char *argv[])
         }
         else if (strcmp (argv[i], "-r") == 0)
         {
-            autoreset = LOW_AUTORESET;
+            autoreset = NO_AUTORESET;
         }
         else if (strcmp (argv[i], "-R") == 0)
         {
-            autoreset = HIGH_AUTORESET;
+            autoreset = AUTORESET;
         }
         else if (strcmp (argv[i], "-t") == 0)
         {
@@ -1540,7 +1514,6 @@ int main(int argc, char *argv[])
 
     if (mode & (AVR_PROGRAM | AVR_VERIFY))
     {
-        prog_reset (fd, autoreset);
         prog_verify (fd, mode, baud, bsize, password, device, hexfile);
     }
     else if (mode & (AVR_CLEAN))
@@ -1552,7 +1525,7 @@ int main(int argc, char *argv[])
 
 
     if (mode & AVR_TERMINAL)
-        do_v24 (fd, autoreset);
+        do_v24 (fd);
 
     com_close(fd);                //close open com port
     return 0;
