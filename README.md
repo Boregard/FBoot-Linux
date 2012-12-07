@@ -39,15 +39,15 @@ bootloader [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex
 -d /dev/ttynn       serial device, (use e.g. /dev/serial/by-id/usb-FTDI* for FT232)
 -b nn               Baudrate
 -t nn               TxD Blocksize (i.e. number of bytes written in one block); USB serial
-		    adaptors for example perform best if they can transfer a block of
-		    characters at a time
+                    adaptors for example perform best if they can transfer a block of
+                    characters at a time
 -w nn               do not use tcdrain, wait nn times byte transmission time instead.
-		    Normally tcdrain is used to wait until all bytes have been transferred,
-		    with some serial adaptors (bluetooth?) this does not work; then waiting
-		    can be used (for cost of performance)
+                    Normally tcdrain is used to wait until all bytes have been transferred,
+                    with some serial adaptors (bluetooth?) this does not work; then waiting
+                    can be used (for cost of performance)
 -r                  switch reset off, DTR will not be changed
 -R (default)        toggle DTR to reset device: DTR will toggle during sending of password
-		    until connection is established (i.e. like Arduino)
+                    until connection is established (i.e. like Arduino)
 -v                  Verify flash
 -p                  Program flash
 -e                  Erase, use together with -p to erase controller,
