@@ -708,14 +708,13 @@ int programflash (int           fd,
 void usage(char *name)
 {
     printf("%s [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex\n"
-           "-d /dev/ttynn   Device\n"
+           "-d /dev/ttynn   Device (use e.g. /dev/serail/by_id/usb-FTDI* for FT232)\n"
            "-b nn           Baudrate\n"
            "-t nn           TxD Blocksize (i.e. number of bytes written in one block)\n"
            "-w nn           do not use tcdrain, wait nn times byte transmission time instead\n"
-           "-r              toggle DTR to reset device:\n"
-           "                set DTR low for reset, wait, set DTR high\n"
-           "-R              toggle DTR to reset device:\n"
-           "                set DTR high for reset, wait, set DTR low\n"
+           "-r              switch reset off, DTR will not be changed\n"
+           "-R (default)    toggle DTR to reset device: DTR will toggle\n"
+           "                during sending of password until connection is establisched\n"
            "-v              Verify\n"
            "-p              Program\n"
            "-e              Erase, use together with -p to erase controller,\n"
