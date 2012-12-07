@@ -2,7 +2,7 @@
  * Bootloader um dem Mikrocontroller Bootloader von Peter Dannegger anzusteuern
  * Teile des Codes sind vom original Booloader von Peter Dannegger (danni@alice-dsl.net)
  *
- * @author Bernhard Michler, based on linux source of Andreas Butti
+ * @author Bernhard Michler (Boregard@gmx.net), based on linux source of Andreas Butti
  */
 
 
