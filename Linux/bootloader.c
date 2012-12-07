@@ -708,7 +708,7 @@ int programflash (int           fd,
 void usage(char *name)
 {
     printf("%s [-d /dev/ttyS0] [-b 9600] -[v|p] file.hex\n"
-           "-d /dev/ttynn   Device (use e.g. /dev/serail/by_id/usb-FTDI* for FT232)\n"
+           "-d /dev/ttynn   Device (use e.g. /dev/serial/by-id/usb-FTDI* for FT232)\n"
            "-b nn           Baudrate\n"
            "-t nn           TxD Blocksize (i.e. number of bytes written in one block)\n"
            "-w nn           do not use tcdrain, wait nn times byte transmission time instead\n"
