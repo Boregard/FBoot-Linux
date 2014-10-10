@@ -1385,7 +1385,7 @@ int main(int argc, char *argv[])
     struct sigaction sa;
 
     sa.sa_handler = sig_handler;
-    sa.sa_flags = SA_NOMASK;
+    sa.sa_flags = SA_NODEFER;
 
     sigaction (SIGHUP, &sa, NULL);
     sigaction (SIGINT, &sa, NULL);
