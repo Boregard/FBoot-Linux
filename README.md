@@ -1,7 +1,8 @@
 FBoot-Linux
 ===========
 
-Tool for fastboot AVR Bootloader, see http://www.mikrocontroller.net/articles/AVR_Bootloader_FastBoot_von_Peter_Dannegger
+Tool for fastboot AVR Bootloader,
+see http://www.mikrocontroller.net/articles/AVR_Bootloader_FastBoot_von_Peter_Dannegger
 
 Made for Linux, runs on OS X as well!
 
